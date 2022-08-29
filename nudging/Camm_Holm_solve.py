@@ -24,9 +24,13 @@ Dt = Constant(dt)
 
 class Camsholm:
     
-    def __init__(self,n,m):
+
+        
+    
+    def __init__(self,n,m,T):
         self.n = n
         self.m = m
+        self.T = T
         self.mesh = PeriodicIntervalMesh(n, 40.0)
         self.V = FunctionSpace(self.mesh, "CG", 1)
         self.W = MixedFunctionSpace((self.V, self.V))
@@ -98,13 +102,14 @@ class Camsholm:
         
         
         
+        
     
   
     
-    def runmethod(self, T):
+    def runmethod(self):
         
         self.t = 0.0
-        while (self.t <  T - 0.5*dt):
+        while (self.t <  self.T - 0.5*dt):
             self.t += dt
             self.dW1.assign(np.random.randn()*sqrt(dt))   
             self.dW2.assign(np.random.randn()*sqrt(dt))  
@@ -114,20 +119,30 @@ class Camsholm:
             self.usolver.solve()
             return self.w0.assign(self.w1)
         
+        
+    def obsmethod(self, ndump):
+        self.u1_obs = []
+        self.dumpn = 0
+        self.ptb = (1/self.n)*np.random.normal(0,1,ndump)  # small perturbation
+        return self.u1_obs.append(Function(self.runmethod())+self.ptb)        
+    
+       
+        
     
 
 
 # In[11]:
 
 
-newobj = Camsholm(100,20)
+#newobj = Camsholm(100,20,10)
 
 
               
-newobj.runmethod(10)
+#newobj.runmethod()
 
 
 # In[ ]:
+#newobj.obsmethod(10)
 
 
 
