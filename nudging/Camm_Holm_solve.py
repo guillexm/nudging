@@ -117,7 +117,8 @@ class Camsholm:
             self.dW4.assign(np.random.randn()*sqrt(dt))
             
             self.usolver.solve()
-            return self.w0.assign(self.w1)
+            self.w0.assign(self.w1)
+            return self.u0
         
         
     def obsmethod(self, ndump):
