@@ -13,7 +13,8 @@ class base_model(object, metaclass=ABCMeta):
         """
         pass
 
-    def obs(self, X0):
+    @abstractmethod
+    def obs(self,X0):
         """
         Observation operator
 
@@ -22,4 +23,16 @@ class base_model(object, metaclass=ABCMeta):
         returns
 
         y - a k-dimensional numpy array of the observations
+        """
+        pass
+
+    @abstractmethod
+    def allocate(self):
+        """
+        Allocate a function to store a model state
+        
+        returns
+        X - a Function of the required type
+        """
+        pass
     
