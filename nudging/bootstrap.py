@@ -5,13 +5,14 @@ import numpy as np
 class bootstrap_filter(base_filter):
     def __init__(self, nsteps, noise_shape):
         self.nsteps = nsteps
-        
+        self.noise_shape = noise_shape
+
     def assimilation_step(self, y, log_likelihood):
         N = len(self.ensemble)
         weights = np.zeros(N)
         # forward model step
         for i in range(N):
-            W = numpy.random.randn(noise_shape)
+            W = np.random.randn(*(self.noise_shape))
             self.model.run(self.nsteps, W,
                            self.ensemble[i], self.ensemble[i])
         
@@ -20,13 +21,13 @@ class bootstrap_filter(base_filter):
             weights[i] = log_likelihood(y-Y)
 
         # renormalise
-        weights = exp(-weights)
+        weights = np.exp(-weights)
         weights /= np.sum(weights)
 
         # resample
         copies = np.array(np.floor(weights*N), dtype=int)
         L = N - np.sum(copies)
-        residual_weights = M*weights - copies
+        residual_weights = N*weights - copies
         residual_weights /= np.sum(residual_weights)
 
         for i in range(L):
@@ -37,5 +38,5 @@ class bootstrap_filter(base_filter):
         new_ensemble = []
 
         for i in range(N):
-            new_ensemble.append(self.ensemble(copies[i]))
+            new_ensemble.append(self.ensemble[copies[i]])
         self.ensemble = new_ensemble

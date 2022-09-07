@@ -1,11 +1,11 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 class base_filter(object, metaclass=ABCMeta):
-    self.ensemble = []
+    ensemble = []
 
     def __init__(self):
         pass
         
-    def setup(self, nensemble, model)
+    def setup(self, nensemble, model):
         """
         Construct the ensemble
 
