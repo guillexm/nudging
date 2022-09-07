@@ -13,6 +13,6 @@ def test_ch():
                    + 0.5*2/(exp(x-203./15.)+exp(-x+203./15.)))
 
     nsteps = 10
-    W = np.random.randn(nsteps, 4)*sqrt(model.dt)
+    W = np.random.randn(nsteps, 4)
     model.run(nsteps, W, In, Out)
     model.obs(Out)

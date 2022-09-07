@@ -63,11 +63,9 @@ class Camsholm(base_model):
         
         # finite element linear functional 
 
-
         self.mh = 0.5*(self.m1 + self.m0)
         self.uh = 0.5*(self.u1 + self.u0)
-        self.v = self.uh*Dt+self.Ln
-
+        self.v = self.uh*Dt+self.Ln*Dt**0.5
 
         self.L = ((self.q*self.u1 + alphasq*self.q.dx(0)*self.u1.dx(0) - self.q*self.m1)*dx +(self.p*(self.m1-self.m0) + (self.p*self.v.dx(0)*self.mh -self.p.dx(0)*self.v*self.mh))*dx)
 
