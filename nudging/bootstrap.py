@@ -1,5 +1,5 @@
 from firedrake import *
-from .filter import *
+from .pfilter import *
 import numpy as np
 
 class bootstrap_filter(base_filter):
@@ -17,8 +17,7 @@ class bootstrap_filter(base_filter):
         
             # particle weights
             Y = self.model.obs(self.ensemble[i])
-            weights[i] = log_likelihood(y-Y,
-                                             self.ensemble[i])
+            weights[i] = log_likelihood(y-Y)
 
         # renormalise
         weights = exp(-weights)
