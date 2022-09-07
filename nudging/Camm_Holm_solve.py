@@ -1,5 +1,5 @@
 from firedrake import *
-from model import *
+from .model import *
 import numpy as np
 
 class Camsholm(base_model):
@@ -28,9 +28,9 @@ class Camsholm(base_model):
         self.am = self.p*self.m*dx
         self.Lm = (self.p*self.u0 + alphasq*self.p.dx(0)*self.u0.dx(0))*dx
         mprob = LinearVariationalProblem(self.am, self.Lm, self.m0)
-        solver_parameters={'ksp_type': 'preonly', 'pc_type': 'lu'})
-        self.msolve = LinearVarationalSolver(mprob,
-                                             solver_parameters=solver_parameters)
+        solver_parameters={'ksp_type': 'preonly', 'pc_type': 'lu'}
+        self.msolve = LinearVariationalSolver(mprob,
+                                              solver_parameters=solver_parameters)
         
         #Build the weak form of the timestepping algorithm. 
 
@@ -47,10 +47,10 @@ class Camsholm(base_model):
         self.fx3 = Function(self.V)
         self.fx4 = Function(self.V)
 
-        self.fx1.interpolate(0.1*sin(math.pi*self.x/8.))
-        self.fx2.interpolate(0.1*sin(2.*math.pi*self.x/8.))
-        self.fx3.interpolate(0.1*sin(3.*math.pi*self.x/8.))
-        self.fx4.interpolate(0.1*sin(4.*math.pi*self.x/8.))
+        self.fx1.interpolate(0.1*sin(pi*self.x/8.))
+        self.fx2.interpolate(0.1*sin(2.*pi*self.x/8.))
+        self.fx3.interpolate(0.1*sin(3.*pi*self.x/8.))
+        self.fx4.interpolate(0.1*sin(4.*pi*self.x/8.))
 
         # with added term
         self.dW1 = Constant(0)
@@ -86,15 +86,14 @@ class Camsholm(base_model):
         self.w0.assign(X0)
         self.msolve.solve()
         for step in range(nsteps):
-            self.t += dt
             self.dW1.assign(W[step, 0])
             self.dW2.assign(W[step, 1])
             self.dW3.assign(W[step, 2])
-            self.dW4.assign(W[step, 4])
+            self.dW4.assign(W[step, 3])
 
             self.usolver.solve()
             self.w0.assign(self.w1)
-        X1.assign(w0)
+        X1.assign(self.w0)
 
 
     def obs(self, X0):
