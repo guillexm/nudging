@@ -14,7 +14,7 @@ class bootstrap_filter(base_filter):
         for i in range(N):
             W = np.random.randn(*(self.noise_shape))
             self.model.run(self.nsteps, W,
-                           self.ensemble[i], self.ensemble[i])
+                           self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
         
             # particle weights
             Y = self.model.obs(self.ensemble[i])
@@ -23,18 +23,21 @@ class bootstrap_filter(base_filter):
         # renormalise
         weights = np.exp(-weights)
         weights /= np.sum(weights)
+        self.ess = 1/np.sum(weights**2)
 
-        # resample
-        copies = np.array(np.floor(weights*N), dtype=int)
+        # resample Algorithm 3.27
+        copies = np.array(np.floor(weights*N), dtype=int)  # x_i = integer fun of len(ensemble)*weight
         L = N - np.sum(copies)
         residual_weights = N*weights - copies
         residual_weights /= np.sum(residual_weights)
 
+        # Need to add parent indexing 
         for i in range(L):
             u =  np.random.rand()
-            cs = np.cumsum(residual_weights)
+            cs = np.cumsum(residual_weights) # cumulative sum 
             istar = np.argmin(cs >= u)
             copies[istar] += 1
+
         new_ensemble = []
 
         for i in range(N):
