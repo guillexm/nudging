@@ -41,8 +41,10 @@ class bootstrap_filter(base_filter):
         # Need to add parent indexing 
         for i in range(L):
             u =  np.random.rand()
-            cs = np.cumsum(residual_weights) # cumulative sum 
-            istar = np.argmin(cs >= u)
+            cs = np.cumsum(residual_weights) # cumulative sum
+            istar = -1
+            while cs[istar+1] < u:
+                istar += 1
             copies[istar] += 1
 
         count = 0
