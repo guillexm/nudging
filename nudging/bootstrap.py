@@ -49,5 +49,6 @@ class bootstrap_filter(base_filter):
         for i in range(N):
             for j in range(copies[i]):
                 self.new_ensemble[count].assign(self.ensemble[i])
+                count += 1
         for i in range(N):
             self.ensemble[i].assign(self.new_ensemble[i])
