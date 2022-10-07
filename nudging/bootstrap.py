@@ -7,6 +7,11 @@ class bootstrap_filter(base_filter):
         self.nsteps = nsteps
         self.noise_shape = noise_shape
 
+        # allocate working memory for resampling
+        self.new_ensemble = []
+        for i in range(self.nensemble):
+            self.new_ensemble.append(self.model.allocate())
+
     def assimilation_step(self, y, log_likelihood):
         N = len(self.ensemble)
         weights = np.zeros(N)
@@ -38,8 +43,9 @@ class bootstrap_filter(base_filter):
             istar = np.argmin(cs >= u)
             copies[istar] += 1
 
-        new_ensemble = []
-
+        count = 0
         for i in range(N):
-            new_ensemble.append(self.ensemble[copies[i]])
-        self.ensemble = new_ensemble
+            for j in range(copies[i]):
+                self.new_ensemble[count].assign(self.ensemble[i])
+        for i in range(N):
+            self.ensemble[i].assign(self.new_ensemble[i])

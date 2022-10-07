@@ -13,6 +13,7 @@ class base_filter(object, metaclass=ABCMeta):
         model - the model to use
         """
         self.model = model
+        self.nensemble = nensemble
         for i in range(nensemble):
             self.ensemble.append(model.allocate())
 
