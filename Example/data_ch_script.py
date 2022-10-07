@@ -32,7 +32,7 @@ for i in range(N_obs):
     y = model.obs(X_truth)
 
     #np.random.seed(100) # for fixing the randomness
-    y_noise = np.random.normal(0.0, 0.1, 40)  
+    y_noise = np.random.normal(0.0, 0.1, 38)
 
     y_obs = y + y_noise
     
