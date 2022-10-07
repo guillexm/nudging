@@ -7,6 +7,8 @@ class bootstrap_filter(base_filter):
         self.nsteps = nsteps
         self.noise_shape = noise_shape
 
+    def setup(self, nensemble, model):
+        super().setup(nensemble, model)
         # allocate working memory for resampling
         self.new_ensemble = []
         for i in range(self.nensemble):

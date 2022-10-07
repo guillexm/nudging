@@ -8,7 +8,7 @@ import numpy as np
 """
 
 
-
+np.random.seed(1798)
 
 
 # For mesh generation
