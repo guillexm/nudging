@@ -1,5 +1,6 @@
 from firedrake import *
 from .pfilter import *
+from .resampling import *
 import numpy as np
 
 class bootstrap_filter(base_filter):
@@ -32,21 +33,8 @@ class bootstrap_filter(base_filter):
         weights /= np.sum(weights)
         self.ess = 1/np.sum(weights**2)
 
-        # resample Algorithm 3.27
-        copies = np.array(np.floor(weights*N), dtype=int)  # x_i = integer fun of len(ensemble)*weight
-        L = N - np.sum(copies)
-        residual_weights = N*weights - copies
-        residual_weights /= np.sum(residual_weights)
-
-        # Need to add parent indexing 
-        for i in range(L):
-            u =  np.random.rand()
-            cs = np.cumsum(residual_weights) # cumulative sum
-            istar = -1
-            while cs[istar+1] < u:
-                istar += 1
-            copies[istar] += 1
-
+        s = 
+        replace this with s_i later
         count = 0
         for i in range(N):
             for j in range(copies[i]):
