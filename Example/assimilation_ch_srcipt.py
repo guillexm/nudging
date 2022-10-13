@@ -16,7 +16,7 @@ model = Camsholm(10)
 x, = SpatialCoordinate(model.mesh) 
 
 # bootstrap filter
-bfilter = bootstrap_filter(5, (5, 4))
+bfilter = jittertemp_filter(5, (5, 4), n_temp=5, n_jitt=5, rho=0.1)
 nensemble = 40
 #print(bfilter.nsteps)
 #bfilter.setup(nensemble, model)

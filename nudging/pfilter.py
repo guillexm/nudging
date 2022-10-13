@@ -74,7 +74,7 @@ class jittertemp_filter(base_filter):
     def __init__(self, nsteps, noise_shape, n_temp, n_jitt, rho):
         self.nsteps = nsteps
         self.noise_shape = noise_shape
-        self.n_temp = n_tenp
+        self.n_temp = n_temp
         self.n_jitt = n_jitt
         self.rho = rho
 
@@ -98,7 +98,7 @@ class jittertemp_filter(base_filter):
                 # forward model step
                 for i in range(N):
                     # put result of forward model into new_ensemble
-                    self.model.run(self.nsteps, Wnew,
+                    self.model.run(self.nsteps, Wnew[i, :],
                                    self.ensemble[i], self.new_ensemble[i])
         
                     # particle weights
