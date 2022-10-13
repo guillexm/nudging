@@ -26,7 +26,7 @@ def residual_resampling(weights):
         copies[istar] += 1
 
     count = 0
-    s = np.array(zeros, dtype=int)
+    s = np.zeros(N, dtype=int)
     for i in range(N):
         for j in range(copies[i]):
             s[count] = i
