@@ -2,7 +2,7 @@ import numpy as np
 
 def residual_resampling(weights):
     """
-    :arg weights : a numpy array of unormalised weights, size N
+    :arg weights : a numpy array of normalised weights, size N
 
     returns
     :arg s: an array of integers, size N. X_i will be replaced

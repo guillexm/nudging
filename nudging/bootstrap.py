@@ -33,12 +33,8 @@ class bootstrap_filter(base_filter):
         weights /= np.sum(weights)
         self.ess = 1/np.sum(weights**2)
 
-        s = 
-        replace this with s_i later
-        count = 0
+        s = residual_resampling(weights)
         for i in range(N):
-            for j in range(copies[i]):
-                self.new_ensemble[count].assign(self.ensemble[i])
-                count += 1
+            self.new_ensemble[i].assign(self.ensemble[s[i]])
         for i in range(N):
             self.ensemble[i].assign(self.new_ensemble[i])
