@@ -10,6 +10,7 @@ def residual_resampling(weights):
     """
     # resample Algorithm 3.27
     copies = np.array(np.floor(weights*N), dtype=int)  # x_i = integer fun of len(ensemble)*weight
+    N = weights.size
     L = N - np.sum(copies)
     residual_weights = N*weights - copies
     residual_weights /= np.sum(residual_weights)
