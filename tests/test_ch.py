@@ -3,7 +3,7 @@ from nudging import *
 import numpy as np
 
 def test_ch():
-    model = Camsholm(10)
+    model = Camsholm(100)
     In = model.allocate()
     Out = model.allocate()
 

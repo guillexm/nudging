@@ -11,15 +11,16 @@ def test_bootstrap():
     u0.interpolate(0.2*2/(exp(x-403./15.) + exp(-x+403./15.))
                    + 0.5*2/(exp(x-203./15.)+exp(-x+203./15.)))
 
-    nsteps = 5
+    nsteps = 5 # number of time steps
     W_truth = np.random.randn(nsteps, 4)
     model.run(nsteps, W_truth, X_truth, X_truth)
-    y = model.obs(X_truth)
+    y = model.obs(X_truth)  # Need to add noise
 
     # bootstrap filter
     bfilter = bootstrap_filter(5, (5, 4))
     nensemble = 10
-    bfilter.setup(nensemble, model)
+    #print(bfilter.nsteps)
+    #bfilter.setup(nensemble, model)
 
     # initialise ensemble
     bfilter.setup(nensemble, model)
@@ -43,4 +44,5 @@ def test_bootstrap():
     # do one assimiliation step
     def log_likelihood(dY):
         return np.dot(dY, dY)/0.1**2
+        
     bfilter.assimilation_step(y, log_likelihood)

@@ -2,9 +2,12 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import *
 from .resampling import *
 import numpy as np
+from scipy.special import logsumexp
+
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
+    #new_ensemble = []
 
     def __init__(self):
         pass
@@ -20,6 +23,7 @@ class base_filter(object, metaclass=ABCMeta):
         self.nensemble = nensemble
         for i in range(nensemble):
             self.ensemble.append(model.allocate())
+            #self.new_ensemble.append(model.allocate())
 
     @abstractmethod
     def assimilation_step(self, y, log_likelihood):
@@ -89,7 +93,7 @@ class jittertemp_filter(base_filter):
         N = len(self.ensemble)
         weights = np.zeros(N)
         old_weights = np.zeros(N)
-
+        self.ess = []
         W = np.random.randn(N, *(self.noise_shape))
         for k in range(self.n_temp): #  Tempering loop
             for l in range(self.n_jitt): # Jittering loop
@@ -103,25 +107,30 @@ class jittertemp_filter(base_filter):
         
                     # particle weights
                     Y = self.model.obs(self.new_ensemble[i])
-                    weights[i] = log_likelihood(y-Y)
-
+                    weights[i] = (1/self.n_temp)*log_likelihood(y-Y)
                     if l == 0:
                         old_weights[i] = weights[i]
                     else:
                         #  Metropolis MCMC
-                        p_accept = min(1, np.exp(-weights[i])/
-                                       np.exp(-old_weights[i]))
+                        p_accept = min(1, np.exp(-weights[i])/ np.exp(-old_weights[i]))
+                        #accept or reject tool
                         if np.random.rand() < p_accept:
                             old_weights[i] = weights[i]
-                            W[:] = Wnew[:]
+                            W[i,:] = Wnew[i,:]
+            
+                weights = np.exp(-weights)
+                weights /= np.sum(weights)
+                self.e_weight = weights
+                self.ess.append(1/np.sum(weights**2))
             # resampling after jittering
-            weights = np.exp(-weights)
-            weights /= np.sum(weights)
-            self.ess = 1/np.sum(weights**2)
             s = residual_resampling(weights)
+            self.e_s = s
             for i in range(N):
                 self.new_ensemble[i].assign(self.ensemble[s[i]])
                 Wnew[i, :] = W[s[i], :]
             for i in range(N):
                 self.ensemble[i].assign(self.new_ensemble[i])
                 W[i, :] = Wnew[i, :]
+
+        self.model.run(self.nsteps, W[i, :],
+                                   self.ensemble[i], self.ensemble[i])

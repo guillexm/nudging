@@ -91,12 +91,12 @@ class Camsholm(base_model):
 
             self.usolver.solve()
             self.w0.assign(self.w1)
-        X1.assign(self.w0)
+        X1.assign(self.w0) # save sol at the nstep th time 
 
 
     def obs(self, X0):
         m, u = X0.split()
-        x_obs = np.arange(1.0,39.0)
+        x_obs = np.arange(0.0,40.0)
         return np.array(u.at(x_obs))
 
 
