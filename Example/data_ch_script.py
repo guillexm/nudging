@@ -19,7 +19,7 @@ u0.interpolate(0.2*2/(exp(x-403./15.) + exp(-x+403./15.)) + 0.5*2/(exp(x-203./15
 
 dt = 0.01
 nsteps = 5 # number of time steps
-N_obs = 50  # number of observation for different time t_1----t_Nobs
+N_obs = 5  # number of observation for different time t_1----t_Nobs
 DT = nsteps*dt # time steps for observation data
 nobs_step = nsteps*N_obs # no of obs setp in terms of actual steps
 

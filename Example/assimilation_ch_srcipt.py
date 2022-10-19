@@ -19,7 +19,7 @@ x, = SpatialCoordinate(model.mesh)
 # bootstrap filter
 #bfilter = bootstrap_filter(5, (5, 4))
 bfilter = jittertemp_filter(5, (5, 4), n_temp=5, n_jitt=5, rho=0.46)
-nensemble = 200
+nensemble = 10
 #print(bfilter.nsteps)
 #bfilter.setup(nensemble, model)
 
@@ -50,7 +50,7 @@ def log_likelihood(dY):
 
 #print([len(a) for a in bfilter.ensemble])
 #Load data
-N_obs = 50
+N_obs = 5
 # true data  load
 y_exact = np.load('y_true.npy')
 plt.plot(y_exact[:,10], 'r-', label='y_true')
