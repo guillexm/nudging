@@ -107,7 +107,7 @@ class jittertemp_filter(base_filter):
         
                     # particle weights
                     Y = self.model.obs(self.new_ensemble[i])
-                    weights[i] = (1/self.n_temp)*log_likelihood(y-Y)
+                    weights[i] = (k/self.n_temp)*log_likelihood(y-Y)
                     if l == 0:
                         old_weights[i] = weights[i]
                     else:
@@ -117,7 +117,6 @@ class jittertemp_filter(base_filter):
                         if np.random.rand() < p_accept:
                             old_weights[i] = weights[i]
                             W[i,:] = Wnew[i,:]
-            
                 weights = np.exp(-weights)
                 weights /= np.sum(weights)
                 self.e_weight = weights
