@@ -75,12 +75,14 @@ class bootstrap_filter(base_filter):
 
 
 class jittertemp_filter(base_filter):
-    def __init__(self, nsteps, noise_shape, n_temp, n_jitt, rho):
+    def __init__(self, nsteps, noise_shape, n_temp, n_jitt, rho,
+                 verbose=False):
         self.nsteps = nsteps
         self.noise_shape = noise_shape
         self.n_temp = n_temp
         self.n_jitt = n_jitt
         self.rho = rho
+        self.verbose=verbose
 
     def setup(self, nensemble, model):
         super().setup(nensemble, model)
@@ -92,13 +94,17 @@ class jittertemp_filter(base_filter):
     def assimilation_step(self, y, log_likelihood):
         N = len(self.ensemble)
         weights = np.zeros(N)
-        old_weights = np.zeros(N)
+        weights[:] = 1/N
+        new_weights = np.zeros(N)
         self.ess = []
         W = np.random.randn(N, *(self.noise_shape))
         for k in range(self.n_temp): #  Tempering loop
             for l in range(self.n_jitt): # Jittering loop
+                if self.verbose:
+                    print("Jitter, Temper step", l, k)
                 # proposal
                 Wnew = self.rho*W + (1-self.rho**2)**0.5*np.random.randn(N, *(self.noise_shape))
+
                 # forward model step
                 for i in range(N):
                     # put result of forward model into new_ensemble
@@ -107,23 +113,26 @@ class jittertemp_filter(base_filter):
         
                     # particle weights
                     Y = self.model.obs(self.new_ensemble[i])
-                    weights[i] = (k/self.n_temp)*log_likelihood(y-Y)
+                    new_weights[i] = exp(-((k+1)/self.n_temp)*log_likelihood(y-Y))
                     if l == 0:
-                        old_weights[i] = weights[i]
+                        weights[i] = new_weights[i]
                     else:
                         #  Metropolis MCMC
-                        p_accept = min(1, np.exp(-weights[i])/ np.exp(-old_weights[i]))
+                        p_accept = min(1, new_weights[i]/weights[i])
                         #accept or reject tool
                         if np.random.rand() < p_accept:
-                            old_weights[i] = weights[i]
+                            weights[i] = new_weights[i]
                             W[i,:] = Wnew[i,:]
-                weights = np.exp(-weights)
+
                 weights /= np.sum(weights)
                 self.e_weight = weights
                 self.ess.append(1/np.sum(weights**2))
+
             # resampling after jittering
             s = residual_resampling(weights)
             self.e_s = s
+            if self.verbose:
+                print("Updating ensembles")
             for i in range(N):
                 self.new_ensemble[i].assign(self.ensemble[s[i]])
                 Wnew[i, :] = W[s[i], :]
@@ -131,5 +140,9 @@ class jittertemp_filter(base_filter):
                 self.ensemble[i].assign(self.new_ensemble[i])
                 W[i, :] = Wnew[i, :]
 
+        if self.verbose:
+            print("Advancing ensemble")
         self.model.run(self.nsteps, W[i, :],
                                    self.ensemble[i], self.ensemble[i])
+        if self.verbose:
+            print("assimilation step complete")

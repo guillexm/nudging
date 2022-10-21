@@ -3,7 +3,7 @@ from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
-    def __init__(self,n):
+    def __init__(self,n, dt = 0.01, alpha=1.0):
         self.n = n
         self.mesh = PeriodicIntervalMesh(n, 40.0)
         self.V = FunctionSpace(self.mesh, "CG", 1)
@@ -12,9 +12,8 @@ class Camsholm(base_model):
         self.m0, self.u0 = self.w0.split()
         self.x, = SpatialCoordinate(self.mesh)
 
-        alpha = 1.0
+        self.alpha = alpha
         alphasq = Constant(alpha**2)
-        dt = 0.01
         self.dt = dt
         Dt = Constant(dt)
         
