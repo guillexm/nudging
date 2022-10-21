@@ -1,5 +1,5 @@
 from firedrake import *
-from .model import *
+from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
