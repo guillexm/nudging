@@ -147,9 +147,9 @@ class jittertemp_filter(base_filter):
                             weights[i] = new_weights[i]
                             W[i,:] = Wnew[i,:]
 
-                weights /= np.sum(weights)
-                self.e_weight = weights
-                self.ess.append(1/np.sum(weights**2))
+                    weights /= np.sum(weights)
+                    self.e_weight = weights
+                    self.ess.append(1/np.sum(weights**2))
 
         if self.verbose:
             print("Advancing ensemble")
