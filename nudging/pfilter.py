@@ -104,6 +104,7 @@ class jittertemp_filter(base_filter):
                 # put result of forward model into new_ensemble
                 self.model.run(self.nsteps, W[i, :],
                                self.ensemble[i], self.new_ensemble[i])
+                Y = self.model.obs(self.new_ensemble[i])
                 weights[i] = exp(-1/self.n_temp*log_likelihood(y-Y))
                 weights /= np.sum(weights)
                 self.e_weight = weights
