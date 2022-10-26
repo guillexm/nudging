@@ -98,6 +98,7 @@ class jittertemp_filter(base_filter):
         new_weights = np.zeros(N)
         self.ess = []
         W = np.random.randn(N, *(self.noise_shape))
+        Wnew = np.zeros(W.shape)
         for k in range(self.n_temp): #  Tempering loop
             # forward model step
             for i in range(N):
