@@ -106,9 +106,9 @@ class jittertemp_filter(base_filter):
                                self.ensemble[i], self.new_ensemble[i])
                 Y = self.model.obs(self.new_ensemble[i])
                 weights[i] = exp(-1/self.n_temp*log_likelihood(y-Y))
-                weights /= np.sum(weights)
-                self.e_weight = weights
-                self.ess.append(1/np.sum(weights**2))
+            weights /= np.sum(weights)
+            self.e_weight = weights
+            self.ess.append(1/np.sum(weights**2))
 
             # resampling BEFORE jittering
             s = residual_resampling(weights)
