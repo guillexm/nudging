@@ -99,6 +99,28 @@ class jittertemp_filter(base_filter):
         self.ess = []
         W = np.random.randn(N, *(self.noise_shape))
         for k in range(self.n_temp): #  Tempering loop
+            # forward model step
+            for i in range(N):
+                # put result of forward model into new_ensemble
+                self.model.run(self.nsteps, W[i, :],
+                               self.ensemble[i], self.new_ensemble[i])
+                weights[i] = exp(-1/self.n_temp*log_likelihood(y-Y))
+                weights /= np.sum(weights)
+                self.e_weight = weights
+                self.ess.append(1/np.sum(weights**2))
+
+            # resampling BEFORE jittering
+            s = residual_resampling(weights)
+            self.e_s = s
+            if self.verbose:
+                print("Updating ensembles")
+            for i in range(N):
+                self.new_ensemble[i].assign(self.ensemble[s[i]])
+                Wnew[i, :] = W[s[i], :]
+            for i in range(N):
+                self.ensemble[i].assign(self.new_ensemble[i])
+                W[i, :] = Wnew[i, :]
+                
             for l in range(self.n_jitt): # Jittering loop
                 if self.verbose:
                     print("Jitter, Temper step", l, k)
@@ -127,18 +149,6 @@ class jittertemp_filter(base_filter):
                 weights /= np.sum(weights)
                 self.e_weight = weights
                 self.ess.append(1/np.sum(weights**2))
-
-            # resampling after jittering
-            s = residual_resampling(weights)
-            self.e_s = s
-            if self.verbose:
-                print("Updating ensembles")
-            for i in range(N):
-                self.new_ensemble[i].assign(self.ensemble[s[i]])
-                Wnew[i, :] = W[s[i], :]
-            for i in range(N):
-                self.ensemble[i].assign(self.new_ensemble[i])
-                W[i, :] = Wnew[i, :]
 
         if self.verbose:
             print("Advancing ensemble")
