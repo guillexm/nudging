@@ -111,8 +111,9 @@ class jittertemp_filter(base_filter):
                                self.ensemble[i], self.new_ensemble[i])
             ess = 0.
             while ess < ess_tol*N:
-                Y = self.model.obs(self.new_ensemble[i])
-                weights[i] = exp(-dtheta*log_likelihood(y-Y))
+                for i in range(N):
+                    Y = self.model.obs(self.new_ensemble[i])
+                    weights[i] = exp(-dtheta*log_likelihood(y-Y))
                 weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
                 if ess < ess_tol*N:
