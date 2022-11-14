@@ -91,25 +91,36 @@ class jittertemp_filter(base_filter):
         for i in range(self.nensemble):
             self.new_ensemble.append(self.model.allocate())
 
-    def assimilation_step(self, y, log_likelihood):
+    def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = len(self.ensemble)
         weights = np.zeros(N)
         weights[:] = 1/N
         new_weights = np.zeros(N)
-        self.ess = []
+        self.ess_temper = []
+        self.theta_temper = []
         W = np.random.randn(N, *(self.noise_shape))
         Wnew = np.zeros(W.shape)
-        for k in range(self.n_temp): #  Tempering loop
+        
+        theta = .0
+        while theta <1.: #  Tempering loop
+            dtheta = 1.0 - theta
             # forward model step
             for i in range(N):
                 # put result of forward model into new_ensemble
                 self.model.run(self.nsteps, W[i, :],
                                self.ensemble[i], self.new_ensemble[i])
-                Y = self.model.obs(self.new_ensemble[i])
-                weights[i] = exp(-1/self.n_temp*log_likelihood(y-Y))
-            weights /= np.sum(weights)
-            self.e_weight = weights
-            self.ess.append(1/np.sum(weights**2))
+            ess = 0.
+            while ess < ess_tol*N:
+                for i in range(N):
+                    Y = self.model.obs(self.new_ensemble[i])
+                    weights[i] = exp(-dtheta*log_likelihood(y-Y))
+                weights /= np.sum(weights)
+                ess = 1/np.sum(weights**2)
+                if ess < ess_tol*N:
+                    dtheta = 0.5*dtheta
+            self.ess_temper.append(ess)
+            theta += dtheta
+            self.theta_temper.append(theta)
 
             # resampling BEFORE jittering
             s = residual_resampling(weights)
@@ -137,7 +148,7 @@ class jittertemp_filter(base_filter):
         
                     # particle weights
                     Y = self.model.obs(self.new_ensemble[i])
-                    new_weights[i] = exp(-((k+1)/self.n_temp)*log_likelihood(y-Y))
+                    new_weights[i] = exp(-theta*log_likelihood(y-Y))
                     if l == 0:
                         weights[i] = new_weights[i]
                     else:
@@ -150,7 +161,6 @@ class jittertemp_filter(base_filter):
 
                 weights /= np.sum(weights)
                 self.e_weight = weights
-                self.ess.append(1/np.sum(weights**2))
 
         if self.verbose:
             print("Advancing ensemble")
