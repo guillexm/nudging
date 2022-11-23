@@ -4,6 +4,16 @@ class base_model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def setup(self, comm):
+        """
+        comm - the MPI communicator used to build the mesh object
+
+        This method should build the mesh and everything else that
+        needs the mesh
+        """
+        pass
+
+    @abstractmethod
     def run(self, nsteps, W, X0, X1):
         """
         nsteps - number of timesteps

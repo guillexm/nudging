@@ -16,15 +16,32 @@ class base_filter(object, metaclass=ABCMeta):
         """
         Construct the ensemble
 
-        nensemble - number of ensemble members
+        nensemble - a list of the number of ensembles on each ensemble rank
         model - the model to use
         """
         self.model = model
         self.nensemble = nensemble
-        for i in range(nensemble):
-            self.ensemble.append(model.allocate())
-            #self.new_ensemble.append(model.allocate())
+        nspace = int(COMM_WORLD.size/np.sum(nensemble))
+        assert(nspace*int(np.sum(nensemble)) == COMM_WORLD.size)
 
+        self.subcommunicators = Ensemble(COMM_WORLD, nspace)
+        # model needs to build the mesh in setup
+        self.model.setup(self.subcommunicators.comm)
+        self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
+        for i in range(self.ensemble_rank):
+            self.ensemble.append(model.allocate())
+            self.new_ensemble.append(model.allocate())
+
+    def resample_communicate(self, weights):
+        """
+        This method handles gathering of the weights,
+        producing the resample communication itinerary,
+        and the executes it.
+
+        weights - a list/array of weights local to this ensemble rank
+        """
+        WRITE ME
+            
     @abstractmethod
     def assimilation_step(self, y, log_likelihood):
         """
