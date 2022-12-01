@@ -67,14 +67,14 @@ class base_filter(object, metaclass=ABCMeta):
         #Use ensemble rank to send all the weights to rank 0
         # self.subcommunicators.Allgatherv(MPI.IN_PLACE, [self._data, list(self.nensmeble)])
         if self.ensemble_rank != 0:
-            for i in range(1,self.nensemble):
-                for k in range(self.ensemble_size):
+            for i in range(1,self.ensemble_size):
+                for k in range(self.nensemble):
                     i_k = k+i*self.nensemble
                     self.subcommunicators.send(weights[i_k], dest=0, tag = i_k)
 
         elif self.ensemble_rank == 0:
-            for i in range(1,self.nensemble):
-                for k in range(self.ensemble_size):
+            for i in range(1,self.ensemble_size):
+                for k in range(self.nensemble):
                     i_k = k+i*self.nensemble
                     self.subcommunicators.recv(weights[i_k], source=i, tag = i_k)
 
@@ -84,14 +84,14 @@ class base_filter(object, metaclass=ABCMeta):
 
         #send  0 and recive others
         if self.ensemble_rank == 0:
-            for i in range(1, self.nensemble):
-                for k in range(self.ensemble_size):
+            for i in range(1,self.ensemble_size):
+                for k in range(self.nensemble):
                     i_k = k+i*self.nensemble
                     self.subcommunicators.send(s[i_k], dest=0, tag = i_k)
         
         elif self.ensemble_rank != 0:
-            for i in range(1, self.nensemble):
-                for k in range(self.ensemble_size):
+            for i in range(1,self.ensemble_size):
+                for k in range(self.nensemble):
                     i_k = k+i*self.nensemble
                     self.subcommunicators.recv(s[i_k], source=i, tag = i_k)
         # wait till its done
