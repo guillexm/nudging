@@ -1,5 +1,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import *
+from firedrake.petsc import PETSc
+from pyop2.mpi import MPI
 from .resampling import *
 import numpy as np
 from scipy.special import logsumexp
@@ -7,11 +9,11 @@ from scipy.special import logsumexp
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
-    #new_ensemble = []
+    new_ensemble = []
 
     def __init__(self):
         pass
-        
+
     def setup(self, nensemble, model):
         """
         Construct the ensemble
@@ -21,16 +23,21 @@ class base_filter(object, metaclass=ABCMeta):
         """
         self.model = model
         self.nensemble = nensemble
-        nspace = int(COMM_WORLD.size/np.sum(nensemble))
-        assert(nspace*int(np.sum(nensemble)) == COMM_WORLD.size)
+        self.fin_ensemble = np.sum(nensemble)
+        self.nspace = int(COMM_WORLD.size/self.fin_ensemble)
+        assert(self.nspace*int(self.fin_ensemble) == COMM_WORLD.size)
 
-        self.subcommunicators = Ensemble(COMM_WORLD, nspace)
+        self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
         # model needs to build the mesh in setup
-        self.model.setup(self.subcommunicators.comm)
+        self.model.setup(self.subcommunicators.comm) # can be removed from here to the model file 
+
+        # setting up ensemble 
         self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
+        self.ensemble_size = self.subcommunicators.ensemble_comm.size
         for i in range(self.ensemble_rank):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
+
 
     def resample_communicate(self, weights):
         """
@@ -40,8 +47,57 @@ class base_filter(object, metaclass=ABCMeta):
 
         weights - a list/array of weights local to this ensemble rank
         """
-        WRITE ME
-            
+        #all_weights -  a list/array of weights across all  ensemble rank
+
+        all_weights_list = []
+        for i in range(self.ensemble_rank):
+            all_weights_list.append(weights)
+        self.all_weights = np.array(all_weights_list)
+
+
+        self.glb_list = [] 
+        for i in range(self.ensemble_size):
+            for k in range(self.nensemble):
+                self.glb_list.append(k+i*self.nensemble)
+        self.glb_arr = np.array(self.glb_list)
+        assert(self.glb_list.size == self.fin_ensemble)
+
+
+
+        #Use ensemble rank to send all the weights to rank 0
+        # self.subcommunicators.Allgatherv(MPI.IN_PLACE, [self._data, list(self.nensmeble)])
+        if self.ensemble_rank != 0:
+            for i in range(1,self.nensemble):
+                for k in range(self.ensemble_size):
+                    i_k = k+i*self.nensemble
+                    self.subcommunicators.send(weights[i_k], dest=0, tag = i_k)
+
+        elif self.ensemble_rank == 0:
+            for i in range(1,self.nensemble):
+                for k in range(self.ensemble_size):
+                    i_k = k+i*self.nensemble
+                    self.subcommunicators.recv(weights[i_k], source=i, tag = i_k)
+
+        #calculate resamling index s in rank 0
+        if self.ensemble_rank == 0:
+            s = residual_resampling(self.all_weights) 
+
+        #send  0 and recive others
+        if self.ensemble_rank == 0:
+            for i in range(1, self.nensemble):
+                for k in range(self.ensemble_size):
+                    i_k = k+i*self.nensemble
+                    self.subcommunicators.send(s[i_k], dest=0, tag = i_k)
+        
+        elif self.ensemble_rank != 0:
+            for i in range(1, self.nensemble):
+                for k in range(self.ensemble_size):
+                    i_k = k+i*self.nensemble
+                    self.subcommunicators.recv(s[i_k], source=i, tag = i_k)
+        # wait till its done
+
+
+
     @abstractmethod
     def assimilation_step(self, y, log_likelihood):
         """
@@ -74,7 +130,7 @@ class bootstrap_filter(base_filter):
             W = np.random.randn(*(self.noise_shape))
             self.model.run(self.nsteps, W,
                            self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
-        
+
             # particle weights
             Y = self.model.obs(self.ensemble[i])
             weights[i] = log_likelihood(y-Y)
@@ -117,7 +173,7 @@ class jittertemp_filter(base_filter):
         self.theta_temper = []
         W = np.random.randn(N, *(self.noise_shape))
         Wnew = np.zeros(W.shape)
-        
+
         theta = .0
         while theta <1.: #  Tempering loop
             dtheta = 1.0 - theta
@@ -150,7 +206,7 @@ class jittertemp_filter(base_filter):
             for i in range(N):
                 self.ensemble[i].assign(self.new_ensemble[i])
                 W[i, :] = Wnew[i, :]
-                
+
             for l in range(self.n_jitt): # Jittering loop
                 if self.verbose:
                     print("Jitter, Temper step", l, k)
@@ -162,7 +218,7 @@ class jittertemp_filter(base_filter):
                     # put result of forward model into new_ensemble
                     self.model.run(self.nsteps, Wnew[i, :],
                                    self.ensemble[i], self.new_ensemble[i])
-        
+
                     # particle weights
                     Y = self.model.obs(self.new_ensemble[i])
                     new_weights[i] = exp(-theta*log_likelihood(y-Y))

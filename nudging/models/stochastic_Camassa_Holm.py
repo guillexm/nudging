@@ -1,26 +1,39 @@
 from firedrake import *
+from firedrake.petsc import PETSc
+from pyop2.mpi import MPI
 from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
-    def __init__(self,n, dt = 0.01, alpha=1.0):
+    def __init__(self,n, nensemble, dt = 0.01, alpha=1.0):
+
         self.n = n
-        self.mesh = PeriodicIntervalMesh(n, 40.0)
+        self.nensemble = nensemble
+        self.alpha = alpha
+        self.dt = dt
+
+    def setup(self, comm):
+        super().setup(comm)
+        
+        self.nspace = int(COMM_WORLD.size/np.sum(self.nensemble))
+        assert(self.nspace*int(np.sum(self.nensemble)) == COMM_WORLD.size)
+
+        self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
+
+        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = self.subcommunicators.comm) # mesh need to be setup in parallel
+        self.x, = SpatialCoordinate(self.mesh)
+
+        #FE spaces
         self.V = FunctionSpace(self.mesh, "CG", 1)
         self.W = MixedFunctionSpace((self.V, self.V))
         self.w0 = Function(self.W)
         self.m0, self.u0 = self.w0.split()
-        self.x, = SpatialCoordinate(self.mesh)
+       
 
-        self.alpha = alpha
-        alphasq = Constant(alpha**2)
-        self.dt = dt
-        Dt = Constant(dt)
-        
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
-
+        alphasq = self.alpha**2
         self.p = TestFunction(self.V)
         self.m = TrialFunction(self.V)
         
