@@ -6,6 +6,8 @@ from .resampling import *
 import numpy as np
 from scipy.special import logsumexp
 
+from parallel_arrays import SharedArray
+
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
@@ -30,72 +32,14 @@ class base_filter(object, metaclass=ABCMeta):
         self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
         # model needs to build the mesh in setup
         self.model.setup(self.subcommunicators.comm) # can be removed from here to the model file 
-
+        #nensemble = tuple(nensemble for _ in range(self.subcommunicators.comm.size))
+        #self.nensemble = nensemble
         # setting up ensemble 
         self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
-        for i in range(self.ensemble_rank):
+        for i in range(self.nensemble):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
-
-
-    def resample_communicate(self, weights):
-        """
-        This method handles gathering of the weights,
-        producing the resample communication itinerary,
-        and the executes it.
-
-        weights - a list/array of weights local to this ensemble rank
-        """
-        #all_weights -  a list/array of weights across all  ensemble rank
-
-        all_weights_list = []
-        for i in range(self.ensemble_rank):
-            all_weights_list.append(weights)
-        self.all_weights = np.array(all_weights_list)
-
-
-        self.glb_list = [] 
-        for i in range(self.ensemble_size):
-            for k in range(self.nensemble):
-                self.glb_list.append(k+i*self.nensemble)
-        self.glb_arr = np.array(self.glb_list)
-        assert(self.glb_list.size == self.fin_ensemble)
-
-
-
-        #Use ensemble rank to send all the weights to rank 0
-        # self.subcommunicators.Allgatherv(MPI.IN_PLACE, [self._data, list(self.nensmeble)])
-        if self.ensemble_rank != 0:
-            for i in range(1,self.ensemble_size):
-                for k in range(self.nensemble):
-                    i_k = k+i*self.nensemble
-                    self.subcommunicators.send(weights[i_k], dest=0, tag = i_k)
-
-        elif self.ensemble_rank == 0:
-            for i in range(1,self.ensemble_size):
-                for k in range(self.nensemble):
-                    i_k = k+i*self.nensemble
-                    self.subcommunicators.recv(weights[i_k], source=i, tag = i_k)
-
-        #calculate resamling index s in rank 0
-        if self.ensemble_rank == 0:
-            s = residual_resampling(self.all_weights) 
-
-        #send  0 and recive others
-        if self.ensemble_rank == 0:
-            for i in range(1,self.ensemble_size):
-                for k in range(self.nensemble):
-                    i_k = k+i*self.nensemble
-                    self.subcommunicators.send(s[i_k], dest=0, tag = i_k)
-        
-        elif self.ensemble_rank != 0:
-            for i in range(1,self.ensemble_size):
-                for k in range(self.nensemble):
-                    i_k = k+i*self.nensemble
-                    self.subcommunicators.recv(s[i_k], source=i, tag = i_k)
-        # wait till its done
-
 
 
     @abstractmethod
@@ -125,27 +69,38 @@ class bootstrap_filter(base_filter):
     def assimilation_step(self, y, log_likelihood):
         N = len(self.ensemble)
         weights = np.zeros(N)
-        # forward model step
+
+        #Shared array
+        share_arr = SharedArray(self, dtype=int, comm=self.subcommunicators.ensemble_comm)
+        weight_arr = SharedArray(self, dtype=float, comm=self.subcommunicators.ensemble_comm)
+       # forward model step
         for i in range(N):
             W = np.random.randn(*(self.noise_shape))
             self.model.run(self.nsteps, W,
-                           self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
+                             self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
 
             # particle weights
             Y = self.model.obs(self.ensemble[i])
-            weights[i] = log_likelihood(y-Y)
+            weight_arr.dlocal[i] = log_likelihood(y-Y)
 
+        # Synchronising weights across all ranks
+        weights = weight_arr.synchronise()
+
+        weights = weight_arr.data()
         # renormalise
         weights = np.exp(-weights)
         weights /= np.sum(weights)
+
+        
         self.ess = 1/np.sum(weights**2)
 
         s = residual_resampling(weights)
-        for i in range(N):
-            self.new_ensemble[i].assign(self.ensemble[s[i]])
-        for i in range(N):
-            self.ensemble[i].assign(self.new_ensemble[i])
 
+        for i in range(N): # update using dlocal, dglobal
+            self.new_ensemble[share_arr.dlocal[i]].assign(self.ensemble[share_arr.dglobal[s[i]]])
+        for i in range(N):
+            self.ensemble[share_arr.dlocal[i]].assign(self.new_ensemble[share_arr.dlocal[i]])
+        
 
 class jittertemp_filter(base_filter):
     def __init__(self, nsteps, noise_shape, n_temp, n_jitt, rho,
