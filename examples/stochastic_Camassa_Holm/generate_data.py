@@ -3,6 +3,8 @@ from fileinput import filename
 from firedrake import *
 from nudging import *
 import numpy as np
+from nudging.models.stochastic_Camassa_Holm import Camsholm
+
 """
 create some synthetic data/observation data at T_1 ---- T_Nobs
 Pick initial conditon
@@ -10,7 +12,7 @@ run model, get obseravation
 add observation noise N(0, sigma^2)
 """
 
-model = Camsholm(100)
+model = Camsholm(100,40)
 X_truth = model.allocate()
 _, u0 = X_truth.split()
 x, = SpatialCoordinate(model.mesh)

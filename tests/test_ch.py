@@ -1,4 +1,6 @@
 from firedrake import *
+from nudging.models.stochastic_Camassa_Holm import Camsholm
+from nudging.model import *
 from nudging import *
 import numpy as np
 

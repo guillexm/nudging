@@ -5,10 +5,9 @@ from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
-    def __init__(self,n, nensemble, dt = 0.01, alpha=1.0):
+    def __init__(self,n,dt = 0.01, alpha=1.0):
 
         self.n = n
-        self.nensemble = nensemble
         self.alpha = alpha
         self.dt = dt
 
