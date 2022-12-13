@@ -6,7 +6,7 @@ from .resampling import *
 import numpy as np
 from scipy.special import logsumexp
 
-from parallel_arrays import SharedArray
+from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
 
 
 class base_filter(object, metaclass=ABCMeta):
@@ -32,12 +32,14 @@ class base_filter(object, metaclass=ABCMeta):
         self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
         # model needs to build the mesh in setup
         self.model.setup(self.subcommunicators.comm) # can be removed from here to the model file 
-        #nensemble = tuple(nensemble for _ in range(self.subcommunicators.comm.size))
-        #self.nensemble = nensemble
+        if isinstance(nensemble, int):
+            nensemble = tuple(nensemble for _ in range(self.subcommunicators.comm.size))
+        
+
         # setting up ensemble 
         self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
-        for i in range(self.nensemble):
+        for i in range(self.nensemble[self.ensemble_rank]):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
 
@@ -69,10 +71,10 @@ class bootstrap_filter(base_filter):
     def assimilation_step(self, y, log_likelihood):
         N = len(self.ensemble)
         weights = np.zeros(N)
-
+        
         #Shared array
-        share_arr = SharedArray(self, dtype=int, comm=self.subcommunicators.ensemble_comm)
-        weight_arr = SharedArray(self, dtype=float, comm=self.subcommunicators.ensemble_comm)
+        weight_arr = SharedArray(dtype=float, comm=self.subcommunicators.ensemble_comm)
+        
        # forward model step
         for i in range(N):
             W = np.random.randn(*(self.noise_shape))
@@ -83,23 +85,51 @@ class bootstrap_filter(base_filter):
             Y = self.model.obs(self.ensemble[i])
             weight_arr.dlocal[i] = log_likelihood(y-Y)
 
-        # Synchronising weights across all ranks
-        weights = weight_arr.synchronise()
-
+        # Synchronising weights to rank 0
+        weight_arr.synchronise(root=0)
         weights = weight_arr.data()
         # renormalise
         weights = np.exp(-weights)
         weights /= np.sum(weights)
-
-        
         self.ess = 1/np.sum(weights**2)
 
-        s = residual_resampling(weights)
+        nlocal = self.nensemble[self.ensemble_rank]
+        nglobal = np.sum(self.nensemble)
+        
+        s_arr = OwnedArray(size = nglobal, dtype=int, comm=self.subcommunicators.ensemble_comm, owner=0)
 
-        for i in range(N): # update using dlocal, dglobal
-            self.new_ensemble[share_arr.dlocal[i]].assign(self.ensemble[share_arr.dglobal[s[i]]])
-        for i in range(N):
-            self.ensemble[share_arr.dlocal[i]].assign(self.new_ensemble[share_arr.dlocal[i]])
+        if self.ensemble_rank == 0:
+            s = residual_resampling(weights)
+            s_arr[i]=s[i]
+
+        # need to brodcast to every rank
+        s_arr.synchronise()
+        s_copy = s_arr.data()
+
+
+        # Fix send and recv of ensemble Communication stage
+        
+        #layout = DistributedDataLayout1D(self.nensemble, comm=self.subcommunicators.ensemble_comm) 
+        id_arr = SharedArray(dtype=float, comm=self.subcommunicators.ensemble_comm)
+        
+        mpi_requests = []
+
+        for i in range(self.nensemble[self.ensemble_rank]):
+            #r = self.ensemble_rank need to fix r and local index
+            tag_list = [self.ensemble_rank, id_arr.dlocal[i]]
+            request_send = self.subcommunicators .isend(self.ensemble[s_copy[id_arr.dglobal[i]]], dest=id_arr.dglobal[i], tag=tag_list) # need to fix with local indxing with rank and tag = rank,local_index
+            #mpi_requests.extend(request_send)
+
+            request_recv = self.subcommunicators .irecv(self.ensemble[id_arr.dglobal[i]], source=s_copy[id_arr.dglobal[i]], tag=tag_list)
+            #mpi_requests.extend(request_recv)
+        
+        # if blocking:
+        #     # wait for the data
+        #     MPI.Request.Waitall(mpi_requests)
+        #     return
+        # else:
+        #     return mpi_requests
+
         
 
 class jittertemp_filter(base_filter):
