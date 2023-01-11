@@ -70,8 +70,7 @@ class bootstrap_filter(base_filter):
 
     def assimilation_step(self, y, log_likelihood):
         N = len(self.ensemble)
-        weights = np.zeros(N)
-        
+
         #Shared array
         weight_arr = SharedArray(dtype=float, comm=self.subcommunicators.ensemble_comm)
         
@@ -87,25 +86,28 @@ class bootstrap_filter(base_filter):
 
         # Synchronising weights to rank 0
         weight_arr.synchronise(root=0)
-        weights = weight_arr.data()
-        # renormalise
-        weights = np.exp(-weights)
-        weights /= np.sum(weights)
-        self.ess = 1/np.sum(weights**2)
+        if self.ensemble_rank == 0:
+            weights = weight_arr.data()
+            # renormalise
+            weights = np.exp(-weights)
+            weights /= np.sum(weights)
+            self.ess = 1/np.sum(weights**2)
 
+        # make an array to communicate resampling protocol to all ranks
         nlocal = self.nensemble[self.ensemble_rank]
         nglobal = np.sum(self.nensemble)
-        
-        s_arr = OwnedArray(size = nglobal, dtype=int, comm=self.subcommunicators.ensemble_comm, owner=0)
+        s_arr = OwnedArray(size = nglobal, dtype=int,
+                           comm=self.subcommunicators.ensemble_comm, owner=0)
 
+        # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
             s = residual_resampling(weights)
-            s_arr[i]=s[i]
+            for i in range(nglobal):
+                s_arr[i]=s[i]
 
-        # need to brodcast to every rank
+        # broadcast protocol to every rank
         s_arr.synchronise()
         s_copy = s_arr.data()
-
 
         # Fix send and recv of ensemble Communication stage
         
