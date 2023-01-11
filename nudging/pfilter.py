@@ -97,8 +97,8 @@ class base_filter(object, metaclass=ABCMeta):
             for j in range(len(s_arr)):
                 if s[j] == iglobal:
                     # want to get the ensemble rank of each global index
-                    for target_rank in range(len(self.offset)):
-                        if self.offset[target_rank] - j < 0:
+                    for target_rank in range(len(self.layout.offset)):
+                        if self.layout.offset[target_rank] - j < 0:
                             target_rank -= 1
                             break
                     targets.append[(j, target_rank)]
@@ -118,8 +118,8 @@ class base_filter(object, metaclass=ABCMeta):
             #         also which local ensemble member they be copied to
             #         the global number of this ensemble member is the tag
             #         also which ensemble member we are receiving from
-            for source_rank in range(len(self.offset)):
-                if self.offset[source_rank] - s[iglobal] < 0:
+            for source_rank in range(len(self.layout.offset)):
+                if self.layout.offset[source_rank] - s[iglobal] < 0:
                     source_rank -= 1
                     break
 
