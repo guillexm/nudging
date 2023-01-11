@@ -153,7 +153,7 @@ class bootstrap_filter(base_filter):
             request_recv = self.subcommunicators.irecv(
                 self.new_ensemble[ilocal],
                 source=source_rank,
-                tag=ilocal)
+                tag=iglobal)
             mpi_requests.extend(request_recv)
 
         MPI.Request.Waitall(mpi_requests)
