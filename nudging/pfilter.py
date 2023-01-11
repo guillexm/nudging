@@ -110,28 +110,53 @@ class bootstrap_filter(base_filter):
         s_copy = s_arr.data()
 
         # Fix send and recv of ensemble Communication stage
-        
-        #layout = DistributedDataLayout1D(self.nensemble, comm=self.subcommunicators.ensemble_comm) 
-        id_arr = SharedArray(dtype=float, comm=self.subcommunicators.ensemble_comm)
-        
+
         mpi_requests = []
+        layout = DistributedDataLayout1D(self.nensemble,
+                                         comm=self.subcommunicators.ensemble_comm)
+        # loop over local ensemble members, doing sends and receives
+        for ilocal in range(self.nensemble[self.ensemble_rank]):
+            # get the global ensemble index
+            iglobal = layout.transform_index(ilocal, itype='l',
+                                             rtype='g')
+            # work on send list
+            # find all j such that s[j] = iglobal
+            targets = []
+            for j in range(len(s_arr)):
+                if s[j] == iglobal:
+                    # want to get the ensemble rank of each global index
+                    for target_rank in range(len(self.offset)):
+                        if self.offset[target_rank] - j < 0:
+                            target_rank -= 1
+                            break
+                    targets.append[(j, target_rank)]
 
-        for i in range(self.nensemble[self.ensemble_rank]):
-            #r = self.ensemble_rank need to fix r and local index
-            tag_list = [self.ensemble_rank, id_arr.dlocal[i]]
-            request_send = self.subcommunicators .isend(self.ensemble[s_copy[id_arr.dglobal[i]]], dest=id_arr.dglobal[i], tag=tag_list) # need to fix with local indxing with rank and tag = rank,local_index
-            #mpi_requests.extend(request_send)
+            for target in targets:
+                if target[1] == self.ensemble_rank:
+                    jlocal = layout.transform_index(target[0], itype='g',
+                                                    rtype='l')
+                    self.new_ensemble[jlocal].assign(self.ensemble[ilocal])
+                else:
+                    request_send = self.subcommunicators.isend(
+                        self.ensemble[ilocal], dest=target[1], tag=target[0])
+                    mpi_requests.extend(request_send)
 
-            request_recv = self.subcommunicators .irecv(self.ensemble[id_arr.dglobal[i]], source=s_copy[id_arr.dglobal[i]], tag=tag_list)
-            #mpi_requests.extend(request_recv)
-        
-        # if blocking:
-        #     # wait for the data
-        #     MPI.Request.Waitall(mpi_requests)
-        #     return
-        # else:
-        #     return mpi_requests
+            # we need a list of which ensemble members we will receive from
+            #         also which local ensemble member they be copied to
+            #         the global number of this ensemble member is the tag
+            #         also which ensemble member we are receiving from
+            for source_rank in range(len(self.offset)):
+                if self.offset[source_rank] - s[ilocal] < 0:
+                    source_rank -= 1
+                    break
 
+            request_recv = self.subcommunicators.irecv(
+                self.new_ensemble[ilocal],
+                source=source_rank,
+                tag=ilocal)
+            mpi_requests.extend(request_recv)
+
+        MPI.Request.Waitall(mpi_requests)
         
 
 class jittertemp_filter(base_filter):
