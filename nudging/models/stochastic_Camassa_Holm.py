@@ -12,13 +12,6 @@ class Camsholm(base_model):
         self.dt = dt
 
     def setup(self, comm):
-        super().setup(comm)
-        
-        self.nspace = int(COMM_WORLD.size/np.sum(self.nensemble))
-        assert(self.nspace*int(np.sum(self.nensemble)) == COMM_WORLD.size)
-
-        self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
-
         self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = self.subcommunicators.comm) # mesh need to be setup in parallel
         self.x, = SpatialCoordinate(self.mesh)
 
