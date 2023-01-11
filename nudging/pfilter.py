@@ -123,11 +123,12 @@ class base_filter(object, metaclass=ABCMeta):
                     source_rank -= 1
                     break
 
-            request_recv = self.subcommunicators.irecv(
-                self.new_ensemble[ilocal],
-                source=source_rank,
-                tag=iglobal)
-            mpi_requests.extend(request_recv)
+            if source_rank != self.ensemble_rank:
+                request_recv = self.subcommunicators.irecv(
+                    self.new_ensemble[ilocal],
+                    source=source_rank,
+                    tag=iglobal)
+                mpi_requests.extend(request_recv)
 
         MPI.Request.Waitall(mpi_requests)
 
