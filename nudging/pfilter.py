@@ -131,6 +131,9 @@ class base_filter(object, metaclass=ABCMeta):
                 mpi_requests.extend(request_recv)
 
         MPI.Request.Waitall(mpi_requests)
+        # copy back into ensemble for the next iteration
+        for i in range(N):
+            self.ensemble[i].assign(self.new_ensemble[i])
 
         
     @abstractmethod
@@ -169,9 +172,6 @@ class bootstrap_filter(base_filter):
         # do the resampling and communication
         self.parallel_resample()
 
-        # copy
-        for i in range(N):
-            self.ensemble[i].assign(self.new_ensemble[i])
 
 class jittertemp_filter(base_filter):
     def __init__(self, nsteps, noise_shape, n_temp, n_jitt, rho,
