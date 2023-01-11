@@ -153,9 +153,6 @@ class bootstrap_filter(base_filter):
         self.nsteps = nsteps
         self.noise_shape = noise_shape
 
-    def setup(self, nensemble, model):
-        super().setup(nensemble, model)
-
     def assimilation_step(self, y, log_likelihood):
         N = len(self.ensemble)
         
@@ -182,13 +179,6 @@ class jittertemp_filter(base_filter):
         self.n_jitt = n_jitt
         self.rho = rho
         self.verbose=verbose
-
-    def setup(self, nensemble, model):
-        super().setup(nensemble, model)
-        # allocate working memory for resampling and forward model
-        self.new_ensemble = []
-        for i in range(self.nensemble):
-            self.new_ensemble.append(self.model.allocate())
 
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = len(self.ensemble)
