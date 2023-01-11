@@ -44,6 +44,10 @@ class base_filter(object, metaclass=ABCMeta):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
 
+        # some numbers for shared array and owned array
+        nlocal = self.nensemble[self.ensemble_rank]
+        nglobal = np.sum(self.nensemble)
+            
         # Shared array for the weights
         self.weight_arr = SharedArray(dtype=float,
                                       comm=self.subcommunicators.ensemble_comm)
@@ -68,10 +72,6 @@ class base_filter(object, metaclass=ABCMeta):
             weights = np.exp(-weights)
             weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
-
-        # make an array to communicate resampling protocol to all ranks
-        nlocal = self.nensemble[self.ensemble_rank]
-        nglobal = np.sum(self.nensemble)
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
