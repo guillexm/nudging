@@ -119,7 +119,7 @@ class base_filter(object, metaclass=ABCMeta):
             #         the global number of this ensemble member is the tag
             #         also which ensemble member we are receiving from
             for source_rank in range(len(self.offset)):
-                if self.offset[source_rank] - s[ilocal] < 0:
+                if self.offset[source_rank] - s[iglobal] < 0:
                     source_rank -= 1
                     break
 
