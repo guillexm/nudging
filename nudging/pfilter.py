@@ -25,13 +25,13 @@ class base_filter(object, metaclass=ABCMeta):
         """
         self.model = model
         self.nensemble = nensemble
-        self.fin_ensemble = np.sum(nensemble)
-        self.nspace = int(COMM_WORLD.size/self.fin_ensemble)
-        assert(self.nspace*int(self.fin_ensemble) == COMM_WORLD.size)
+        n_ensemble_partitions = len(nensemble)
+        self.nspace = int(COMM_WORLD.size/n_ensemble_partitions)
+        assert(self.nspace*n_ensemble_partitions == COMM_WORLD.size)
 
         self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
         # model needs to build the mesh in setup
-        self.model.setup(self.subcommunicators.comm) # can be removed from here to the model file 
+        self.model.setup(self.subcommunicators.comm)
         if isinstance(nensemble, int):
             nensemble = tuple(nensemble for _ in range(self.subcommunicators.comm.size))
         
@@ -45,25 +45,34 @@ class base_filter(object, metaclass=ABCMeta):
             self.new_ensemble.append(model.allocate())
 
         # some numbers for shared array and owned array
-        nlocal = self.nensemble[self.ensemble_rank]
-        nglobal = np.sum(self.nensemble)
+        self.nlocal = self.nensemble[self.ensemble_rank]
+        self.nglobal = int(np.sum(self.nensemble))
             
         # Shared array for the weights
-        self.weight_arr = SharedArray(dtype=float,
+        self.weight_arr = SharedArray(partition=self.nensemble, dtype=float,
                                       comm=self.subcommunicators.ensemble_comm)
         # Owned array for the resampling protocol
-        self.s_arr = OwnedArray(size = nglobal, dtype=int,
+        self.s_arr = OwnedArray(size = self.nglobal, dtype=int,
                                 comm=self.subcommunicators.ensemble_comm,
                                 owner=0)
         # data layout for coordinating resampling communication
         self.layout = DistributedDataLayout1D(self.nensemble,
                                          comm=self.subcommunicators.ensemble_comm)
 
+        # offset_list
+        self.offset_list = []
+        for i_rank in range(len(self.nensemble)):
+            self.offset_list.append(sum(self.nensemble[:i_rank]))
+
+        
+
                 
         #a resampling method
         self.resampler = residual_resampling
         
     def parallel_resample(self):
+        
+        
         # Synchronising weights to rank 0
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
@@ -75,34 +84,42 @@ class base_filter(object, metaclass=ABCMeta):
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
-            s = self.resampler(weights)
-            for i in range(nglobal):
+            s = self.resampler(weights, model=SimModel)
+            for i in range(self.nglobal):
                 self.s_arr[i]=s[i]
 
         # broadcast protocol to every rank
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
+        print('=========================================Rank====================================', self.ensemble_rank)
+        print('s', s_copy)
 
         # Fix send and recv of ensemble Communication stage
-
+        # we need a list of which ensemble members we will receive from
+        #         also which local ensemble member they be copied to
+        #         the global number of this ensemble member is the tag
+        #         also which ensemble member we are receiving from
         mpi_requests = []
         # loop over local ensemble members, doing sends and receives
         for ilocal in range(self.nensemble[self.ensemble_rank]):
+            print('ilocal', ilocal)
             # get the global ensemble index
             iglobal = self.layout.transform_index(ilocal, itype='l',
                                              rtype='g')
+            print('iglobal', iglobal)
             # work on send list
             # find all j such that s[j] = iglobal
             targets = []
-            for j in range(len(s_arr)):
-                if s[j] == iglobal:
+            for j in range(self.s_arr.size):
+                if s_copy[j] == iglobal:
+                    print('J_val', j)
                     # want to get the ensemble rank of each global index
-                    for target_rank in range(len(self.layout.offset)):
-                        if self.layout.offset[target_rank] - j < 0:
+                    for target_rank in range(len(self.offset_list)):
+                        if self.offset_list[target_rank] - j > 0:
                             target_rank -= 1
                             break
-                    targets.append[(j, target_rank)]
-
+                    targets.append((j, target_rank))
+                    print('Target', targets)
             for target in targets:
                 if target[1] == self.ensemble_rank:
                     jlocal = self.layout.transform_index(target[0],
@@ -114,12 +131,9 @@ class base_filter(object, metaclass=ABCMeta):
                         self.ensemble[ilocal], dest=target[1], tag=target[0])
                     mpi_requests.extend(request_send)
 
-            # we need a list of which ensemble members we will receive from
-            #         also which local ensemble member they be copied to
-            #         the global number of this ensemble member is the tag
-            #         also which ensemble member we are receiving from
-            for source_rank in range(len(self.layout.offset)):
-                if self.layout.offset[source_rank] - s[iglobal] < 0:
+
+            for source_rank in range(len(self.offset_list)):
+                if self.offset_list[source_rank] - s_copy[iglobal] > 0:
                     source_rank -= 1
                     break
 
@@ -132,7 +146,7 @@ class base_filter(object, metaclass=ABCMeta):
 
         MPI.Request.Waitall(mpi_requests)
         # copy back into ensemble for the next iteration
-        for i in range(N):
+        for i in range(self.nlocal):
             self.ensemble[i].assign(self.new_ensemble[i])
 
         
@@ -147,6 +161,22 @@ class base_filter(object, metaclass=ABCMeta):
         """
         pass
 
+class sim_filter(base_filter):
+
+    def __init__(self):
+        super().__init__()
+
+    def assimilation_step(self, y, log_likelihood):
+        N = len(self.ensemble)
+       # forward model step
+        for i in range(N):
+            self.model.run(self.ensemble[i])   
+            # particle weights
+            Y = self.model.obs()
+            self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+
+        # do the resampling and communication
+        self.parallel_resample()
 
 class bootstrap_filter(base_filter):
     def __init__(self, nsteps, noise_shape):
@@ -212,7 +242,7 @@ class jittertemp_filter(base_filter):
             self.theta_temper.append(theta)
 
             # resampling BEFORE jittering
-            s = residual_resampling(weights)
+            s = residual_resampling(weights, model=SimModel)
             self.e_s = s
             if self.verbose:
                 print("Updating ensembles")
