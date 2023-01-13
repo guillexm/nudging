@@ -4,7 +4,7 @@ from nudging import *
 from nudging.models.sim_model import SimModel
 
 
-def residual_resampling(weights, model):
+def residual_resampling(weights, comm):
     """
     :arg weights : a numpy array of normalised weights, size N
 
@@ -13,8 +13,8 @@ def residual_resampling(weights, model):
     with X_{s_i}.
     """
     
-    model = SimModel()
-    mesh = model.mesh
+    
+    mesh = UnitSquareMesh(2,2, comm = comm)
 
     N = weights.size
     # resample Algorithm 3.27
