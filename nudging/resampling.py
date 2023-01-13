@@ -1,4 +1,5 @@
 import numpy as np
+from sympy import Point
 from firedrake import *
 from nudging import *
 from nudging.models.sim_model import SimModel
@@ -22,14 +23,18 @@ def residual_resampling(weights, comm):
     L = N - np.sum(copies)
     residual_weights = N*weights - copies
     residual_weights /= np.sum(residual_weights)
-    
+    # make the random number into a function in the space FunctionSpace(model.mesh, "R", 0) 
+    U = FunctionSpace(mesh, "R", 0) 
+    u = Function(U)
     # Need to add parent indexing 
     for i in range(L):
-        u = FunctionSpace(mesh, "R", 0) 
-        u.assign(np.random.rand()) # make the random number into a function in the space FunctionSpace(model.mesh, "R", 0) 
+        u.assign(np.random.rand())
+        x =np.array([0.25,0.25])
+        w = u.at(x)
+
         cs = np.cumsum(residual_weights)
         istar = -1
-        while cs[istar+1] < u:
+        while cs[istar+1] < w:
             istar += 1
         copies[istar] += 1
 
