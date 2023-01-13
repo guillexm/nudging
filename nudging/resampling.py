@@ -13,8 +13,7 @@ def residual_resampling(weights, model):
     with X_{s_i}.
     """
     
-    #model = SimModel()
-    model = SimModel().setup(comm='...')
+    model = SimModel()
     mesh = model.mesh
 
     N = weights.size
