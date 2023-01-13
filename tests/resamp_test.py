@@ -7,7 +7,7 @@ from nudging.parallel_arrays import in_range
 
 from nudging.parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
 
-nensemble = [4, (2, 3, 4, 2)]
+nensemble = [4, (2, 3, 4)]
 
 
 
@@ -52,4 +52,4 @@ def assimilation_step(nensemble):
 
     print("s", s)
 
-assimilation_step(6)
+assimilation_step(nensemble[1])
