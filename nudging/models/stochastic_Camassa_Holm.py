@@ -11,7 +11,7 @@ class Camsholm(base_model):
         self.alpha = alpha
         self.dt = dt
 
-    def setup(self, comm):
+    def setup(self, comm=MPI.COMM_WORLD):
         self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
         self.x, = SpatialCoordinate(self.mesh)
 

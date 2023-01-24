@@ -84,7 +84,7 @@ class base_filter(object, metaclass=ABCMeta):
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
-            s = self.resampler(weights, comm = self.subcommunicators.comm)
+            s = self.resampler(weights, self.model)
             for i in range(self.nglobal):
                 self.s_arr[i]=s[i]
 

@@ -10,7 +10,7 @@ class SimModel(base_model):
     def __init__(self):
         pass
 
-    def setup(self, comm):
+    def setup(self, comm=MPI.COMM_WORLD):
         self.mesh = UnitSquareMesh(2,2, comm = comm)
         self.V = FunctionSpace(self.mesh, "CG", 1)
 

@@ -5,7 +5,7 @@ from nudging import *
 from nudging.models.sim_model import SimModel
 
 
-def residual_resampling(weights, comm):
+def residual_resampling(weights, model):
     """
     :arg weights : a numpy array of normalised weights, size N
 
@@ -14,18 +14,14 @@ def residual_resampling(weights, comm):
     with X_{s_i}.
     """
     
+    u = model.U
     
-    mesh = UnitSquareMesh(2,2, comm = comm)
-
     N = weights.size
     # resample Algorithm 3.27
     copies = np.array(np.floor(weights*N), dtype=int) 
     L = N - np.sum(copies)
     residual_weights = N*weights - copies
     residual_weights /= np.sum(residual_weights)
-    # make the random number into a function in the space FunctionSpace(model.mesh, "R", 0) 
-    U = FunctionSpace(mesh, "R", 0) 
-    u = Function(U)
     
     # Need to add parent indexing 
     for i in range(L):

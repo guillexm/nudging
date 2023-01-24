@@ -1,4 +1,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
+from functools import cached_property
+from firedrake import Function, FunctionSpaec
+
 class base_model(object, metaclass=ABCMeta):
     def __init__(self):
         pass
@@ -46,3 +49,13 @@ class base_model(object, metaclass=ABCMeta):
         """
         pass
     
+
+    @cached_property
+    def U(self):
+        """
+        An R space function to deal with uniform random numbers
+        for resampling
+        """
+        R = FunctionSpace(self.mesh, "R", 0)
+        U = Function(R)
+        return U

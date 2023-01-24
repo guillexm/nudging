@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
     Do assimilation step for tempering and jittering steps 
 """
 model = Camsholm(100)
+model.setup()
 x, = SpatialCoordinate(model.mesh) 
 
 bfilter = jittertemp_filter(5, (5, 4), n_temp=5, n_jitt=5, rho=0.46,
