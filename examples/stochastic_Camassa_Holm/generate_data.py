@@ -1,6 +1,7 @@
 from ctypes import sizeof
 from fileinput import filename
 from firedrake import *
+from pyop2.mpi import MPI
 from nudging import *
 import numpy as np
 from nudging.models.stochastic_Camassa_Holm import Camsholm
@@ -12,7 +13,7 @@ run model, get obseravation
 add observation noise N(0, sigma^2)
 """
 
-model = Camsholm(100,40)
+model = Camsholm(100)
 X_truth = model.allocate()
 _, u0 = X_truth.split()
 x, = SpatialCoordinate(model.mesh)

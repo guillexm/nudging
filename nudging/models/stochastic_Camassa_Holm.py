@@ -12,7 +12,7 @@ class Camsholm(base_model):
         self.dt = dt
 
     def setup(self, comm):
-        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = self.subcommunicators.comm) # mesh need to be setup in parallel
+        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
         self.x, = SpatialCoordinate(self.mesh)
 
         #FE spaces
