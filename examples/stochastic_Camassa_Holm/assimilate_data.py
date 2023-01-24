@@ -3,6 +3,8 @@ from nudging import *
 import numpy as np
 import matplotlib.pyplot as plt
 
+from nudging.models.stochastic_Camassa_Holm import Camsholm
+
 """ read obs from saved file 
     Do assimilation step for tempering and jittering steps 
 """
@@ -10,25 +12,19 @@ model = Camsholm(100)
 model.setup()
 x, = SpatialCoordinate(model.mesh) 
 
-bfilter = jittertemp_filter(5, (5, 4), n_temp=5, n_jitt=5, rho=0.46,
-                            verbose=True)
-nensemble = 40
+bfilter = bootstrap_filter(5, (5,4))
+
+# bfilter = jittertemp_filter(5, (5, 4), n_temp=5, n_jitt=5, rho=0.46,
+#                             verbose=True)
+nensemble = [2,1,2,2,1]
 bfilter.setup(nensemble, model)
 
-dx0 = Constant(0.)
-dx1 = Constant(0.)
-a = Constant(0.)
-b = Constant(0.)
 
-u0_exp = (1+a)*0.2*2/(exp(x-403./15. + dx0) + exp(-x+403./15. + dx0)) \
-    + (1+b)*0.5*2/(exp(x-203./15. + dx1)+exp(-x+203./15. + dx1))
+u0_exp = (1+0.1)*0.2*2/(exp(x-403./15. + 0.01) + exp(-x+403./15. + 0.02)) \
+    + (1+0.2)*0.5*2/(exp(x-203./15. + 0.03)+exp(-x+203./15. + 0.01))
 
-for i in range(nensemble):
-    dx0.assign(np.random.randn()*0.1)
-    dx1.assign(np.random.randn()*0.1)
-    a.assign(np.random.randn()*0.1)
-    b.assign(np.random.randn()*0.1)
 
+for i in range(sum(nensemble)):
     _, u = bfilter.ensemble[i].split()
     u.interpolate(u0_exp)  
 
