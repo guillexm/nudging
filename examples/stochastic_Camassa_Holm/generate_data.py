@@ -14,6 +14,7 @@ add observation noise N(0, sigma^2)
 """
 
 model = Camsholm(100)
+model.setup()
 X_truth = model.allocate()
 _, u0 = X_truth.split()
 x, = SpatialCoordinate(model.mesh)
@@ -40,4 +41,5 @@ for i in range(N_obs):
     
     y_obs_full[i,:] = y_obs 
 
+# need to save into rank 0
 y_obsdata = np.save("y_obs.npy", y_obs_full)

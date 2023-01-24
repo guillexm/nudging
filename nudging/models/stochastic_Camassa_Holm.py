@@ -11,7 +11,7 @@ class Camsholm(base_model):
         self.alpha = alpha
         self.dt = dt
 
-    def setup(self, comm=MPI.COMM_WORLD):
+    def setup(self, comm = MPI.COMM_WORLD):
         self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
         self.x, = SpatialCoordinate(self.mesh)
 
@@ -66,7 +66,7 @@ class Camsholm(base_model):
         self.Ln = self.fx1*self.dW1+self.fx2*self.dW2+self.fx3*self.dW3+self.fx4*self.dW4
         
         # finite element linear functional 
-
+        Dt = Constant(self.dt)
         self.mh = 0.5*(self.m1 + self.m0)
         self.uh = 0.5*(self.u1 + self.u0)
         self.v = self.uh*Dt+self.Ln*Dt**0.5

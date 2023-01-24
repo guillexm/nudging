@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import cached_property
-from firedrake import Function, FunctionSpaec
+from firedrake import Function, FunctionSpace
 
 class base_model(object, metaclass=ABCMeta):
     def __init__(self):
