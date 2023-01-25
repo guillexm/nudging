@@ -24,9 +24,3 @@ simfilter.setup(nensemble, model)
 model.ensemble_rank = simfilter.ensemble_rank
 
 simfilter.assimilation_step(y, log_likelihood)
-
-
-
-
-
-

@@ -9,8 +9,6 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
     Do assimilation step for tempering and jittering steps 
 """
 model = Camsholm(100)
-model.setup()
-x, = SpatialCoordinate(model.mesh) 
 
 bfilter = bootstrap_filter(5, (5,4))
 
@@ -19,14 +17,13 @@ bfilter = bootstrap_filter(5, (5,4))
 nensemble = [2,1,2,2,1]
 bfilter.setup(nensemble, model)
 
-
+x, = SpatialCoordinate(model.mesh) 
 u0_exp = (1+0.1)*0.2*2/(exp(x-403./15. + 0.01) + exp(-x+403./15. + 0.02)) \
     + (1+0.2)*0.5*2/(exp(x-203./15. + 0.03)+exp(-x+203./15. + 0.01))
 
-
-for i in range(sum(nensemble)):
+for i in range(nensemble[bfilter.ensemble_rank]):
     _, u = bfilter.ensemble[i].split()
-    u.interpolate(u0_exp)  
+    u.interpolate(u0_exp)
 
 def log_likelihood(dY):
     return np.dot(dY, dY)/0.05**2/2
