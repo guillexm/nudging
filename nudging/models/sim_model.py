@@ -11,7 +11,7 @@ class SimModel(base_model):
         pass
 
     def setup(self, comm=MPI.COMM_WORLD):
-        self.mesh = UnitSquareMesh(2,2, comm = comm)
+        self.mesh = UnitSquareMesh(20,20, comm = comm)
         self.V = FunctionSpace(self.mesh, "CG", 1)
 
     def run(self, X):

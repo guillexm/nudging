@@ -2,6 +2,7 @@ from firedrake import *
 from nudging import *
 import numpy as np
 import matplotlib.pyplot as plt
+from firedrake.petsc import PETSc
 
 from nudging.models.stochastic_Camassa_Holm import Camsholm
 
@@ -10,11 +11,12 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
 """
 model = Camsholm(100)
 
+
 bfilter = bootstrap_filter(5, (5,4))
 
 # bfilter = jittertemp_filter(5, (5, 4), n_temp=5, n_jitt=5, rho=0.46,
 #                             verbose=True)
-nensemble = [2,1,2,2,1]
+nensemble = [3,2,5,4]
 bfilter.setup(nensemble, model)
 
 x, = SpatialCoordinate(model.mesh) 
@@ -33,25 +35,24 @@ y_exact = np.load('y_true.npy')
 N_obs = y_exact.shape[0]
 
 
-station_view = 15
-plt.plot(y_exact[:,station_view], 'b-', label='Y_true')
+#station_view = 15
+#plt.plot(y_exact[:,station_view], 'b-', label='Y_true')
 
 y = np.load('y_obs.npy') 
 
-y_e = np.zeros((N_obs, nensemble, y.shape[1]))
-y_e_mean = np.zeros((N_obs, nensemble))
+#y_e = np.zeros((N_obs, nensemble, y.shape[1]))
+#y_e_mean = np.zeros((N_obs, nensemble))
 
 # do assimiliation step
 for k in range(N_obs):
-    print("Step", k)
+    PETSc.Sys.Print("Step", k)
     bfilter.assimilation_step(y[k,:], log_likelihood)
-    for e in range(nensemble):
-        y_e[k,e,:] = model.obs(bfilter.ensemble[e])
 
-y_e_mean = np.mean(y_e[:,:,station_view], axis=1)
 
-plt.plot(y_e[:,:,station_view], 'y-.')
-plt.plot(y_e_mean, 'g--', label='Y_ensemble_mean')
-plt.legend()
-plt.title('Ensemble prediction with N_ensemble = ' +str(nensemble))
-plt.show()
+#y_e_mean = np.mean(y_e[:,:,station_view], axis=1)
+
+# plt.plot(y_e[:,:,station_view], 'y-.')
+# #plt.plot(y_e_mean, 'g--', label='Y_ensemble_mean')
+# plt.legend()
+# plt.title('Ensemble prediction with N_ensemble = ' +str(nensemble))
+# plt.show()

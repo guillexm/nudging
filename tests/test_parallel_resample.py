@@ -5,7 +5,7 @@ from nudging.models.sim_model import SimModel
 import numpy as np
 
 
-nensemble = [2,1,2,2,1]
+nensemble = [2,2,2,2,2]
 
 model = SimModel()
 

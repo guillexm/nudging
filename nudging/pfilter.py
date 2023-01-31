@@ -5,9 +5,9 @@ from pyop2.mpi import MPI
 from .resampling import *
 import numpy as np
 from scipy.special import logsumexp
+from firedrake.petsc import PETSc
 
 from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
-
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
@@ -37,6 +37,7 @@ class base_filter(object, metaclass=ABCMeta):
         
         # setting up ensemble 
         self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
+        print('my rank is', self.ensemble_rank)
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
         self.ensemble = []
         self.new_ensemble = []
@@ -72,7 +73,7 @@ class base_filter(object, metaclass=ABCMeta):
         
     def parallel_resample(self):
         
-        
+        PETSc.Sys.Print('in resample')
         # Synchronising weights to rank 0
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
@@ -91,8 +92,8 @@ class base_filter(object, metaclass=ABCMeta):
         # broadcast protocol to every rank
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
-        print('=========================================Rank====================================', self.ensemble_rank)
-        print('s', s_copy)
+        PETSc.Sys.Print('=========================================Rank====================================', self.ensemble_rank)
+        PETSc.Sys.Print('s', s_copy)
 
         # Fix send and recv of ensemble Communication stage
         # we need a list of which ensemble members we will receive from
@@ -101,25 +102,26 @@ class base_filter(object, metaclass=ABCMeta):
         #         also which ensemble member we are receiving from
         mpi_requests = []
         # loop over local ensemble members, doing sends and receives
+
         for ilocal in range(self.nensemble[self.ensemble_rank]):
-            print('ilocal', ilocal)
+            PETSc.Sys.Print('ilocal', ilocal)
             # get the global ensemble index
             iglobal = self.layout.transform_index(ilocal, itype='l',
                                              rtype='g')
-            print('iglobal', iglobal)
+            PETSc.Sys.Print('iglobal', iglobal)
             # work on send list
             # find all j such that s[j] = iglobal
             targets = []
             for j in range(self.s_arr.size):
                 if s_copy[j] == iglobal:
-                    print('J_val', j)
+                    PETSc.Sys.Print('J_val', j)
                     # want to get the ensemble rank of each global index
                     for target_rank in range(len(self.offset_list)):
                         if self.offset_list[target_rank] - j > 0:
                             target_rank -= 1
                             break
                     targets.append((j, target_rank))
-                    print('Target', targets)
+                    PETSc.Sys.Print('Target', targets)
             for target in targets:
                 if target[1] == self.ensemble_rank:
                     jlocal = self.layout.transform_index(target[0],
@@ -143,11 +145,15 @@ class base_filter(object, metaclass=ABCMeta):
                     source=source_rank,
                     tag=iglobal)
                 mpi_requests.extend(request_recv)
-
+        PETSc.Sys.Print('waiting')
         MPI.Request.Waitall(mpi_requests)
         # copy back into ensemble for the next iteration
+        PETSc.Sys.Print('copy')
         for i in range(self.nlocal):
+            print(i, self.subcommunicators.ensemble_comm.rank, self.subcommunicators.comm.rank)
             self.ensemble[i].assign(self.new_ensemble[i])
+        PETSc.Sys.Print('done copy')
+
 
         
     @abstractmethod
@@ -184,7 +190,7 @@ class bootstrap_filter(base_filter):
         self.noise_shape = noise_shape
 
     def assimilation_step(self, y, log_likelihood):
-        N = len(self.ensemble)
+        N = self.nensemble[self.ensemble_rank]
         
        # forward model step
         for i in range(N):
@@ -195,9 +201,10 @@ class bootstrap_filter(base_filter):
             # particle weights
             Y = self.model.obs(self.ensemble[i])
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
-
+        PETSc.Sys.Print('starting resample')
         # do the resampling and communication
         self.parallel_resample()
+        PETSc.Sys.Print('outside resample')
 
 
 class jittertemp_filter(base_filter):
@@ -211,7 +218,7 @@ class jittertemp_filter(base_filter):
         self.verbose=verbose
 
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
-        N = len(self.ensemble)
+        N = self.nensemble[self.ensemble_rank]
         weights = np.zeros(N)
         weights[:] = 1/N
         new_weights = np.zeros(N)
