@@ -15,7 +15,7 @@ class SimModel(base_model):
         self.V = FunctionSpace(self.mesh, "CG", 1)
 
     def run(self, X):
-        X.assign(self.ensemble_rank)
+        pass
 
     def obs(self):
         return np.random.normal(0,1)

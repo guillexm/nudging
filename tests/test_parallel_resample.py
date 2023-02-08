@@ -23,6 +23,13 @@ def parallel_resample():
     model.ensemble_rank = simfilter.ensemble_rank
     
     simfilter.assimilation_step(y, log_likelihood)
+    for i in range(len(simfilter.ensemble)):
+        iglobal = simfilter.layout.transform_index(i, itype='l',
+                                                   rtype='g')
+        s_val = simfilter.s_copy[iglobal]
+        e_val = simfilter.ensemble[i]
+        assert(s_val - int(e_val.dat.data[:].min()) == 0)
+        assert(s_val - int(e_val.dat.data[:].max()) == 0)
 
 @pytest.mark.parallel(nprocs=5)
 def test_parallel_resample_1():

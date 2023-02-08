@@ -64,9 +64,6 @@ class base_filter(object, metaclass=ABCMeta):
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
             self.offset_list.append(sum(self.nensemble[:i_rank]))
-
-        
-
                 
         #a resampling method
         self.resampler = residual_resampling
@@ -99,6 +96,7 @@ class base_filter(object, metaclass=ABCMeta):
         # broadcast protocol to every rank
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
+        self.s_copy = s_copy
         PETSc.Sys.Print('=========================================Rank====================================', self.ensemble_rank)
         PETSc.Sys.Print('s', s_copy)
 
@@ -170,10 +168,9 @@ class sim_filter(base_filter):
         super().__init__()
 
     def assimilation_step(self, y, log_likelihood):
-        N = len(self.ensemble)
-       # forward model step
-        for i in range(N):
-            self.model.run(self.ensemble[i])   
+        for i in range(self.nensemble[self.ensemble_rank]):
+            # set the particle value to the global index
+            self.ensemble[i].assign(self.offset_list[self.ensemble_rank]+i)
             # particle weights
             Y = self.model.obs()
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
