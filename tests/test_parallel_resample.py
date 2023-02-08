@@ -5,8 +5,7 @@ from nudging.models.sim_model import SimModel
 import numpy as np
 import pytest
 
-@pytest.mark.parallel(nprocs=5)
-def test_parallel_resample():
+def parallel_resample():
     nensemble = [2,2,2,2,2]
     
     model = SimModel()
@@ -24,3 +23,11 @@ def test_parallel_resample():
     model.ensemble_rank = simfilter.ensemble_rank
     
     simfilter.assimilation_step(y, log_likelihood)
+
+@pytest.mark.parallel(nprocs=5)
+def test_parallel_resample_1():
+    parallel_resample()
+
+@pytest.mark.parallel(nprocs=10)
+def test_parallel_resample_2():
+    parallel_resample()

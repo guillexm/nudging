@@ -70,6 +70,13 @@ class base_filter(object, metaclass=ABCMeta):
                 
         #a resampling method
         self.resampler = residual_resampling
+
+    def index2rank(self, index):
+        for rank in range(len(self.offset_list)):
+            if self.offset_list[rank] - index > 0:
+                rank -= 1
+                break
+        return rank
         
     def parallel_resample(self):
         
@@ -102,55 +109,45 @@ class base_filter(object, metaclass=ABCMeta):
         #         also which ensemble member we are receiving from
         mpi_requests = []
         # loop over local ensemble members, doing sends and receives
-
+        
         for ilocal in range(self.nensemble[self.ensemble_rank]):
             PETSc.Sys.Print('ilocal', ilocal)
             # get the global ensemble index
             iglobal = self.layout.transform_index(ilocal, itype='l',
                                              rtype='g')
-            PETSc.Sys.Print('iglobal', iglobal)
-            # work on send list
-            # find all j such that s[j] = iglobal
+            print('iglobal', iglobal, flush=True)
+            # add to send list
             targets = []
             for j in range(self.s_arr.size):
                 if s_copy[j] == iglobal:
                     PETSc.Sys.Print('J_val', j)
-                    # want to get the ensemble rank of each global index
-                    for target_rank in range(len(self.offset_list)):
-                        if self.offset_list[target_rank] - j > 0:
-                            target_rank -= 1
-                            break
-                    targets.append((j, target_rank))
-                    PETSc.Sys.Print('Target', targets)
+                    targets.append(j)
+            print('Target', "rank", self.ensemble_rank,
+                  "ilocal", ilocal,
+                  "iglobal", iglobal,
+                  targets, flush=True)
+
             for target in targets:
-                if target[1] == self.ensemble_rank:
-                    jlocal = self.layout.transform_index(target[0],
-                                                         itype='g',
-                                                         rtype='l')
-                    self.new_ensemble[jlocal].assign(self.ensemble[ilocal])
-                else:
-                    request_send = self.subcommunicators.isend(
-                        self.ensemble[ilocal], dest=target[1], tag=target[0])
-                    mpi_requests.extend(request_send)
+                request_send = self.subcommunicators.isend(
+                    self.ensemble[ilocal],
+                    dest=self.index2rank(target),
+                    tag=target)
+                mpi_requests.extend(request_send)
 
+            source_rank = self.index2rank(s_copy[iglobal])
+            request_recv = self.subcommunicators.irecv(
+                self.new_ensemble[ilocal],
+                source=source_rank,
+                tag=iglobal)
+            mpi_requests.extend(request_recv)
 
-            for source_rank in range(len(self.offset_list)):
-                if self.offset_list[source_rank] - s_copy[iglobal] > 0:
-                    source_rank -= 1
-                    break
-
-            if source_rank != self.ensemble_rank:
-                request_recv = self.subcommunicators.irecv(
-                    self.new_ensemble[ilocal],
-                    source=source_rank,
-                    tag=iglobal)
-                mpi_requests.extend(request_recv)
         PETSc.Sys.Print('waiting')
         MPI.Request.Waitall(mpi_requests)
         # copy back into ensemble for the next iteration
-        PETSc.Sys.Print('copy')
+        print('copy', flush=True)
         for i in range(self.nlocal):
-            print(i, self.subcommunicators.ensemble_comm.rank, self.subcommunicators.comm.rank)
+            print(i, self.subcommunicators.ensemble_comm.rank,
+                  self.subcommunicators.comm.rank)
             self.ensemble[i].assign(self.new_ensemble[i])
         PETSc.Sys.Print('done copy')
 
