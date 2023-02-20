@@ -14,8 +14,7 @@ model = Camsholm(100)
 
 bfilter = bootstrap_filter(5, (5,4))
 
-# bfilter = jittertemp_filter(5, (5, 4), n_temp=5, n_jitt=5, rho=0.46,
-#                             verbose=True)
+
 nensemble = [3,2,5,4]
 bfilter.setup(nensemble, model)
 
@@ -34,25 +33,10 @@ def log_likelihood(dY):
 y_exact = np.load('y_true.npy')
 N_obs = y_exact.shape[0]
 
-
-#station_view = 15
-#plt.plot(y_exact[:,station_view], 'b-', label='Y_true')
-
 y = np.load('y_obs.npy') 
-
-#y_e = np.zeros((N_obs, nensemble, y.shape[1]))
-#y_e_mean = np.zeros((N_obs, nensemble))
 
 # do assimiliation step
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
     bfilter.assimilation_step(y[k,:], log_likelihood)
 
-
-#y_e_mean = np.mean(y_e[:,:,station_view], axis=1)
-
-# plt.plot(y_e[:,:,station_view], 'y-.')
-# #plt.plot(y_e_mean, 'g--', label='Y_ensemble_mean')
-# plt.legend()
-# plt.title('Ensemble prediction with N_ensemble = ' +str(nensemble))
-# plt.show()
