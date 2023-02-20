@@ -168,9 +168,8 @@ class bootstrap_filter(base_filter):
         
        # forward model step
         for i in range(N):
-            W = np.random.randn(*(self.noise_shape))
-            self.model.run(self.nsteps, W,
-                             self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
+            self.model.randomize()
+            self.model.run(self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
 
             Y = self.model.obs(self.ensemble[i])
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
