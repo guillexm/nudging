@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import cached_property
-from firedrake import Function, FunctionSpace
+from firedrake import Function, FunctionSpace, PCG64, RandomGenerator
+import firedrake as fd
 
 class base_model(object, metaclass=ABCMeta):
     def __init__(self):
@@ -67,5 +68,5 @@ class base_model(object, metaclass=ABCMeta):
 
     @cached_property
     def rg(self):
-        pcg = PCG64(self.seed)
-        self.rg = RandomGenerator(pcg)
+        pcg = PCG64(seed=self.seed)
+        return RandomGenerator(pcg)

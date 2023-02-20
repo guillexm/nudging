@@ -11,6 +11,7 @@ class Camsholm(base_model):
         self.nsteps = nsteps
         self.alpha = alpha
         self.dt = dt
+        self.seed = seed
 
     def setup(self, comm = MPI.COMM_WORLD):
         self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
@@ -59,12 +60,16 @@ class Camsholm(base_model):
         # with added term
         self.R = FunctionSpace(self.mesh, "R", 0)
         self.dW = []
-        for i in range(nsteps):
+        for i in range(self.nsteps):
             subdW = []
             for j in range(4):
                 subdW.append(Function(self.R))
             self.dW.append(subdW)
-        
+
+        self.dW1 = Function(self.R)
+        self.dW2 = Function(self.R)
+        self.dW3 = Function(self.R)
+        self.dW4 = Function(self.R)
         self.Ln = self.fx1*self.dW1+self.fx2*self.dW2+self.fx3*self.dW3+self.fx4*self.dW4
         
         # finite element linear functional 
@@ -89,7 +94,7 @@ class Camsholm(base_model):
     def run(self, X0, X1):
         self.w0.assign(X0)
         self.msolve.solve()
-        for step in range(nsteps):
+        for step in range(self.nsteps):
             self.dW1.assign(self.dW[step][0])
             self.dW2.assign(self.dW[step][1])
             self.dW3.assign(self.dW[step][2])
@@ -110,6 +115,7 @@ class Camsholm(base_model):
         return Function(self.W)
 
     def randomize(self):
-        for i in range(nsteps):
+        rg = self.rg
+        for i in range(self.nsteps):
             for j in range(4):
                 self.dW[i][j].assign(rg.normal(self.R, 0., 1.0))

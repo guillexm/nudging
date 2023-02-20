@@ -159,10 +159,6 @@ class sim_filter(base_filter):
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
-    def __init__(self, nsteps, noise_shape):
-        self.nsteps = nsteps
-        self.noise_shape = noise_shape
-
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
         
