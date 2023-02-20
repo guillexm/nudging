@@ -1,30 +1,138 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from firedrake import *
+from firedrake.petsc import PETSc
+from pyop2.mpi import MPI
 from .resampling import *
 import numpy as np
 from scipy.special import logsumexp
+from firedrake.petsc import PETSc
 
+from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
-    #new_ensemble = []
+    new_ensemble = []
 
     def __init__(self):
         pass
-        
+
     def setup(self, nensemble, model):
         """
         Construct the ensemble
 
-        nensemble - number of ensemble members
+        nensemble - a list of the number of ensembles on each ensemble rank
         model - the model to use
         """
         self.model = model
         self.nensemble = nensemble
-        for i in range(nensemble):
-            self.ensemble.append(model.allocate())
-            #self.new_ensemble.append(model.allocate())
+        n_ensemble_partitions = len(nensemble)
+        self.nspace = int(COMM_WORLD.size/n_ensemble_partitions)
+        assert(self.nspace*n_ensemble_partitions == COMM_WORLD.size)
 
+        self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
+        # model needs to build the mesh in setup
+        self.model.setup(self.subcommunicators.comm)
+        if isinstance(nensemble, int):
+            nensemble = tuple(nensemble for _ in range(self.subcommunicators.comm.size))
+        
+        # setting up ensemble 
+        self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
+        self.ensemble_size = self.subcommunicators.ensemble_comm.size
+        self.ensemble = []
+        self.new_ensemble = []
+        for i in range(self.nensemble[self.ensemble_rank]):
+            self.ensemble.append(model.allocate())
+            self.new_ensemble.append(model.allocate())
+
+        # some numbers for shared array and owned array
+        self.nlocal = self.nensemble[self.ensemble_rank]
+        self.nglobal = int(np.sum(self.nensemble))
+            
+        # Shared array for the weights
+        self.weight_arr = SharedArray(partition=self.nensemble, dtype=float,
+                                      comm=self.subcommunicators.ensemble_comm)
+        # Owned array for the resampling protocol
+        self.s_arr = OwnedArray(size = self.nglobal, dtype=int,
+                                comm=self.subcommunicators.ensemble_comm,
+                                owner=0)
+        # data layout for coordinating resampling communication
+        self.layout = DistributedDataLayout1D(self.nensemble,
+                                         comm=self.subcommunicators.ensemble_comm)
+
+        # offset_list
+        self.offset_list = []
+        for i_rank in range(len(self.nensemble)):
+            self.offset_list.append(sum(self.nensemble[:i_rank]))
+                
+        #a resampling method
+        self.resampler = residual_resampling
+
+    def index2rank(self, index):
+        for rank in range(len(self.offset_list)):
+            if self.offset_list[rank] - index > 0:
+                rank -= 1
+                break
+        return rank
+        
+    def parallel_resample(self):
+        
+        self.weight_arr.synchronise(root=0)
+        if self.ensemble_rank == 0:
+            weights = self.weight_arr.data()
+            # renormalise
+            weights = np.exp(-weights)
+            weights /= np.sum(weights)
+            self.ess = 1/np.sum(weights**2)
+
+        # compute resampling protocol on rank 0
+        if self.ensemble_rank == 0:
+            s = self.resampler(weights, self.model)
+            for i in range(self.nglobal):
+                self.s_arr[i]=s[i]
+
+        # broadcast protocol to every rank
+        self.s_arr.synchronise()
+        s_copy = self.s_arr.data()
+        self.s_copy = s_copy
+
+        mpi_requests = []
+        
+        for ilocal in range(self.nensemble[self.ensemble_rank]):
+            iglobal = self.layout.transform_index(ilocal, itype='l',
+                                             rtype='g')
+            # add to send list
+            targets = []
+            for j in range(self.s_arr.size):
+                if s_copy[j] == iglobal:
+                    targets.append(j)
+            print('Target', "rank", self.ensemble_rank,
+                  "ilocal", ilocal,
+                  "iglobal", iglobal,
+                  targets, flush=True)
+
+            for target in targets:
+                request_send = self.subcommunicators.isend(
+                    self.ensemble[ilocal],
+                    dest=self.index2rank(target),
+                    tag=target)
+                mpi_requests.extend(request_send)
+
+            source_rank = self.index2rank(s_copy[iglobal])
+            request_recv = self.subcommunicators.irecv(
+                self.new_ensemble[ilocal],
+                source=source_rank,
+                tag=iglobal)
+            mpi_requests.extend(request_recv)
+
+        MPI.Request.Waitall(mpi_requests)
+        for i in range(self.nlocal):
+            print(i, self.subcommunicators.ensemble_comm.rank,
+                  self.subcommunicators.comm.rank)
+            self.ensemble[i].assign(self.new_ensemble[i])
+
+
+
+        
     @abstractmethod
     def assimilation_step(self, y, log_likelihood):
         """
@@ -36,42 +144,38 @@ class base_filter(object, metaclass=ABCMeta):
         """
         pass
 
+class sim_filter(base_filter):
+
+    def __init__(self):
+        super().__init__()
+
+    def assimilation_step(self, y, log_likelihood):
+        for i in range(self.nensemble[self.ensemble_rank]):
+            # set the particle value to the global index
+            self.ensemble[i].assign(self.offset_list[self.ensemble_rank]+i)
+
+            Y = self.model.obs()
+            self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+        self.parallel_resample()
 
 class bootstrap_filter(base_filter):
     def __init__(self, nsteps, noise_shape):
         self.nsteps = nsteps
         self.noise_shape = noise_shape
 
-    def setup(self, nensemble, model):
-        super().setup(nensemble, model)
-        # allocate working memory for resampling
-        self.new_ensemble = []
-        for i in range(self.nensemble):
-            self.new_ensemble.append(self.model.allocate())
-
     def assimilation_step(self, y, log_likelihood):
-        N = len(self.ensemble)
-        weights = np.zeros(N)
-        # forward model step
+        N = self.nensemble[self.ensemble_rank]
+        
+       # forward model step
         for i in range(N):
             W = np.random.randn(*(self.noise_shape))
             self.model.run(self.nsteps, W,
-                           self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
-        
-            # particle weights
+                             self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
+
             Y = self.model.obs(self.ensemble[i])
-            weights[i] = log_likelihood(y-Y)
+            self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+        self.parallel_resample()
 
-        # renormalise
-        weights = np.exp(-weights)
-        weights /= np.sum(weights)
-        self.ess = 1/np.sum(weights**2)
-
-        s = residual_resampling(weights)
-        for i in range(N):
-            self.new_ensemble[i].assign(self.ensemble[s[i]])
-        for i in range(N):
-            self.ensemble[i].assign(self.new_ensemble[i])
 
 
 class jittertemp_filter(base_filter):
@@ -84,15 +188,8 @@ class jittertemp_filter(base_filter):
         self.rho = rho
         self.verbose=verbose
 
-    def setup(self, nensemble, model):
-        super().setup(nensemble, model)
-        # allocate working memory for resampling and forward model
-        self.new_ensemble = []
-        for i in range(self.nensemble):
-            self.new_ensemble.append(self.model.allocate())
-
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
-        N = len(self.ensemble)
+        N = self.nensemble[self.ensemble_rank]
         weights = np.zeros(N)
         weights[:] = 1/N
         new_weights = np.zeros(N)
@@ -100,7 +197,7 @@ class jittertemp_filter(base_filter):
         self.theta_temper = []
         W = np.random.randn(N, *(self.noise_shape))
         Wnew = np.zeros(W.shape)
-        
+
         theta = .0
         while theta <1.: #  Tempering loop
             dtheta = 1.0 - theta
@@ -123,7 +220,7 @@ class jittertemp_filter(base_filter):
             self.theta_temper.append(theta)
 
             # resampling BEFORE jittering
-            s = residual_resampling(weights)
+            s = residual_resampling(weights, model=SimModel)
             self.e_s = s
             if self.verbose:
                 print("Updating ensembles")
@@ -133,7 +230,7 @@ class jittertemp_filter(base_filter):
             for i in range(N):
                 self.ensemble[i].assign(self.new_ensemble[i])
                 W[i, :] = Wnew[i, :]
-                
+
             for l in range(self.n_jitt): # Jittering loop
                 if self.verbose:
                     print("Jitter, Temper step", l, k)
@@ -145,7 +242,7 @@ class jittertemp_filter(base_filter):
                     # put result of forward model into new_ensemble
                     self.model.run(self.nsteps, Wnew[i, :],
                                    self.ensemble[i], self.new_ensemble[i])
-        
+
                     # particle weights
                     Y = self.model.obs(self.new_ensemble[i])
                     new_weights[i] = exp(-theta*log_likelihood(y-Y))

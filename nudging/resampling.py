@@ -1,6 +1,11 @@
 import numpy as np
+from sympy import Point
+from firedrake import *
+from nudging import *
+from nudging.models.sim_model import SimModel
 
-def residual_resampling(weights):
+
+def residual_resampling(weights, model):
     """
     :arg weights : a numpy array of normalised weights, size N
 
@@ -8,20 +13,23 @@ def residual_resampling(weights):
     :arg s: an array of integers, size N. X_i will be replaced
     with X_{s_i}.
     """
-
+    
+    u = model.U
+    
     N = weights.size
-    # resample Algorithm 3.27
-    copies = np.array(np.floor(weights*N), dtype=int)  # x_i = integer fun of len(ensemble)*weight
+    copies = np.array(np.floor(weights*N), dtype=int) 
     L = N - np.sum(copies)
     residual_weights = N*weights - copies
     residual_weights /= np.sum(residual_weights)
     
-    # Need to add parent indexing 
     for i in range(L):
-        u =  np.random.rand()
-        cs = np.cumsum(residual_weights) # cumulative sum
+        w = np.random.rand()
+        u.assign(w)
+        u0 =  u.dat.data[:]
+
+        cs = np.cumsum(residual_weights)
         istar = -1
-        while cs[istar+1] < u:
+        while cs[istar+1] < u0:
             istar += 1
         copies[istar] += 1
 

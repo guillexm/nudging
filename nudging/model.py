@@ -1,6 +1,19 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
+from functools import cached_property
+from firedrake import Function, FunctionSpace
+
 class base_model(object, metaclass=ABCMeta):
     def __init__(self):
+        pass
+
+    @abstractmethod
+    def setup(self, comm):
+        """
+        comm - the MPI communicator used to build the mesh object
+
+        This method should build the mesh and everything else that
+        needs the mesh
+        """
         pass
 
     @abstractmethod
@@ -36,3 +49,13 @@ class base_model(object, metaclass=ABCMeta):
         """
         pass
     
+
+    @cached_property
+    def U(self):
+        """
+        An R space function to deal with uniform random numbers
+        for resampling
+        """
+        R = FunctionSpace(self.mesh, "R", 0)
+        U = Function(R)
+        return U

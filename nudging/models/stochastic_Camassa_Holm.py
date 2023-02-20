@@ -1,26 +1,31 @@
 from firedrake import *
+from firedrake.petsc import PETSc
+from pyop2.mpi import MPI
 from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
-    def __init__(self,n, dt = 0.01, alpha=1.0):
+    def __init__(self,n,dt = 0.01, alpha=1.0):
+
         self.n = n
-        self.mesh = PeriodicIntervalMesh(n, 40.0)
+        self.alpha = alpha
+        self.dt = dt
+
+    def setup(self, comm = MPI.COMM_WORLD):
+        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
+        self.x, = SpatialCoordinate(self.mesh)
+
+        #FE spaces
         self.V = FunctionSpace(self.mesh, "CG", 1)
         self.W = MixedFunctionSpace((self.V, self.V))
         self.w0 = Function(self.W)
         self.m0, self.u0 = self.w0.split()
-        self.x, = SpatialCoordinate(self.mesh)
+       
 
-        self.alpha = alpha
-        alphasq = Constant(alpha**2)
-        self.dt = dt
-        Dt = Constant(dt)
-        
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
-
+        alphasq = self.alpha**2
         self.p = TestFunction(self.V)
         self.m = TrialFunction(self.V)
         
@@ -61,7 +66,7 @@ class Camsholm(base_model):
         self.Ln = self.fx1*self.dW1+self.fx2*self.dW2+self.fx3*self.dW3+self.fx4*self.dW4
         
         # finite element linear functional 
-
+        Dt = Constant(self.dt)
         self.mh = 0.5*(self.m1 + self.m0)
         self.uh = 0.5*(self.u1 + self.u0)
         self.v = self.uh*Dt+self.Ln*Dt**0.5
