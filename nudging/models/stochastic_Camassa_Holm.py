@@ -109,7 +109,7 @@ class Camsholm(base_model):
     def allocate(self):        
         return Function(self.W)
 
-    def randomise(self):
+    def randomize(self):
         for i in range(nsteps):
             for j in range(4):
                 self.dW[i][j].assign(rg.normal(self.R, 0., 1.0))
