@@ -37,7 +37,6 @@ class base_filter(object, metaclass=ABCMeta):
         
         # setting up ensemble 
         self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
-        print('my rank is', self.ensemble_rank)
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
         self.ensemble = []
         self.new_ensemble = []
@@ -77,8 +76,6 @@ class base_filter(object, metaclass=ABCMeta):
         
     def parallel_resample(self):
         
-        PETSc.Sys.Print('in resample')
-        # Synchronising weights to rank 0
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             weights = self.weight_arr.data()
@@ -97,28 +94,16 @@ class base_filter(object, metaclass=ABCMeta):
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
         self.s_copy = s_copy
-        PETSc.Sys.Print('=========================================Rank====================================', self.ensemble_rank)
-        PETSc.Sys.Print('s', s_copy)
 
-        # Fix send and recv of ensemble Communication stage
-        # we need a list of which ensemble members we will receive from
-        #         also which local ensemble member they be copied to
-        #         the global number of this ensemble member is the tag
-        #         also which ensemble member we are receiving from
         mpi_requests = []
-        # loop over local ensemble members, doing sends and receives
         
         for ilocal in range(self.nensemble[self.ensemble_rank]):
-            PETSc.Sys.Print('ilocal', ilocal)
-            # get the global ensemble index
             iglobal = self.layout.transform_index(ilocal, itype='l',
                                              rtype='g')
-            print('iglobal', iglobal, flush=True)
             # add to send list
             targets = []
             for j in range(self.s_arr.size):
                 if s_copy[j] == iglobal:
-                    PETSc.Sys.Print('J_val', j)
                     targets.append(j)
             print('Target', "rank", self.ensemble_rank,
                   "ilocal", ilocal,
@@ -139,15 +124,12 @@ class base_filter(object, metaclass=ABCMeta):
                 tag=iglobal)
             mpi_requests.extend(request_recv)
 
-        PETSc.Sys.Print('waiting')
         MPI.Request.Waitall(mpi_requests)
-        # copy back into ensemble for the next iteration
-        print('copy', flush=True)
         for i in range(self.nlocal):
             print(i, self.subcommunicators.ensemble_comm.rank,
                   self.subcommunicators.comm.rank)
             self.ensemble[i].assign(self.new_ensemble[i])
-        PETSc.Sys.Print('done copy')
+
 
 
         
@@ -171,11 +153,9 @@ class sim_filter(base_filter):
         for i in range(self.nensemble[self.ensemble_rank]):
             # set the particle value to the global index
             self.ensemble[i].assign(self.offset_list[self.ensemble_rank]+i)
-            # particle weights
+
             Y = self.model.obs()
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
-
-        # do the resampling and communication
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
@@ -192,13 +172,10 @@ class bootstrap_filter(base_filter):
             self.model.run(self.nsteps, W,
                              self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
 
-            # particle weights
             Y = self.model.obs(self.ensemble[i])
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
-        PETSc.Sys.Print('starting resample')
-        # do the resampling and communication
         self.parallel_resample()
-        PETSc.Sys.Print('outside resample')
+
 
 
 class jittertemp_filter(base_filter):

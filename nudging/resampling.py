@@ -17,18 +17,14 @@ def residual_resampling(weights, model):
     u = model.U
     
     N = weights.size
-    # resample Algorithm 3.27
     copies = np.array(np.floor(weights*N), dtype=int) 
     L = N - np.sum(copies)
     residual_weights = N*weights - copies
     residual_weights /= np.sum(residual_weights)
     
-    # Need to add parent indexing 
     for i in range(L):
         w = np.random.rand()
         u.assign(w)
-        #x =np.array([0.25,0.25])
-        #u = u.at(x)
         u0 =  u.dat.data[:]
 
         cs = np.cumsum(residual_weights)
