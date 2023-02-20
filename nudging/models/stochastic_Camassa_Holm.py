@@ -61,7 +61,7 @@ class Camsholm(base_model):
         self.dW = []
         for i in range(nsteps):
             subdW = []
-            for j = in range(4):
+            for j in range(4):
                 subdW.append(Function(self.R))
             self.dW.append(subdW)
         
@@ -111,5 +111,5 @@ class Camsholm(base_model):
 
     def randomise(self):
         for i in range(nsteps):
-            for j = in range(4):
+            for j in range(4):
                 self.dW[i][j].assign(rg.normal(self.R, 0., 1.0))
