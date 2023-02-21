@@ -111,12 +111,12 @@ class base_filter(object, metaclass=ABCMeta):
                   targets, flush=True)
 
             for target in targets:
-                if type(self.ensemble[ilocal] == 'dict'):
-                    for key, item in self.ensemble[ilocal].iteritems():
+                if type(self.ensemble[ilocal] == 'list'):
+                    for k in range(len(self.ensemble[ilocal])):
                         request_send = self.subcommunicators.isend(
                             self.ensemble[ilocal][key],
                             dest=self.index2rank(target),
-                            tag=str(target)+str(key))
+                            tag=1000*target+k)
                         mpi_requests.extend(request_send)
                 else:
                     request_send = self.subcommunicators.isend(
@@ -126,12 +126,12 @@ class base_filter(object, metaclass=ABCMeta):
                     mpi_requests.extend(request_send)
 
             source_rank = self.index2rank(s_copy[iglobal])
-            if type(self.ensemble[ilocal] == 'dict'):
-                for key, item in self.ensemble[ilocal].iteritems():
+            if type(self.ensemble[ilocal] == 'list'):
+                for k in range(len(self.ensemble[ilocal])):
                     request_recv = self.subcommunicators.irecv(
                         self.new_ensemble[ilocal][key],
                         source=source_rank,
-                        tag=str(iglobal)+str(key))
+                        tag=1000*target+k)
                     mpi_requests.extend(request_recv)
             else:
                 request_recv = self.subcommunicators.irecv(
@@ -190,10 +190,8 @@ class bootstrap_filter(base_filter):
 
 
 class jittertemp_filter(base_filter):
-    def __init__(self, nsteps, noise_shape, n_temp, n_jitt, rho,
+    def __init__(self, n_temp, n_jitt, rho,
                  verbose=False):
-        self.nsteps = nsteps
-        self.noise_shape = noise_shape
         self.n_temp = n_temp
         self.n_jitt = n_jitt
         self.rho = rho
@@ -206,8 +204,6 @@ class jittertemp_filter(base_filter):
         new_weights = np.zeros(N)
         self.ess_temper = []
         self.theta_temper = []
-        W = np.random.randn(N, *(self.noise_shape))
-        Wnew = np.zeros(W.shape)
 
         theta = .0
         while theta <1.: #  Tempering loop

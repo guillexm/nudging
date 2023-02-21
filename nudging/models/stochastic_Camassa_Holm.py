@@ -112,17 +112,18 @@ class Camsholm(base_model):
 
 
     def allocate(self):
-        particle = {}
-        particle['State'] = Function(self.W)
+        particle = [Function(self.W)]
         for i in range(self.nsteps):
             for j in range(4):
                 dW = Function(self.R)
                 dW.assign(rg.normal(self.R, 0., 1.0))
-                particle['Noise'+str(i)+'_'+str(j)] = dW 
+                particle.extend(dW) 
 
     def randomize(self, X):
         rg = self.rg
+        count = 0
         for i in range(self.nsteps):
             for j in range(4):
-                X['Noise'+str(i)+'_'+str(j)].assign(
+                count += 1
+                X[count].assign(
                     rg.normal(self.R, 0., 1.0))
