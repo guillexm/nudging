@@ -92,21 +92,22 @@ class Camsholm(base_model):
         self.m1, self.u1 = self.w1.split()
     
     def run(self, X0, X1):
-        self.w0.assign(X0['State'])
+        self.w0.assign(X0[0])
         self.msolve.solve()
         for step in range(self.nsteps):
-            self.dW1.assign(X0['Noise'+str(step)+'_'+str(0)])
-            self.dW2.assign(X0['Noise'+str(step)+'_'+str(1)])
-            self.dW3.assign(X0['Noise'+str(step)+'_'+str(2)])
-            self.dW4.assign(X0['Noise'+str(step)+'_'+str(3)])
+            #print(type(self.dW1), type(X0[4*step]))
+            self.dW1.assign(X0[4*step+1])
+            self.dW2.assign(X0[4*step+2])
+            self.dW3.assign(X0[4*step+3])
+            self.dW4.assign(X0[4*step+4])
 
             self.usolver.solve()
             self.w0.assign(self.w1)
-        X1['State'].assign(self.w0) # save sol at the nstep th time 
+        X1[0].assign(self.w0) # save sol at the nstep th time 
 
 
     def obs(self, X0):
-        m, u = X0['State'].split()
+        m, u = X0[0].split()
         x_obs = np.arange(0.0,40.0)
         return np.array(u.at(x_obs))
 
@@ -117,7 +118,7 @@ class Camsholm(base_model):
             for j in range(4):
                 dW = Function(self.R)
                 dW.assign(self.rg.normal(self.R, 0., 1.0))
-                particle.extend(dW) 
+                particle.append(dW) 
         return particle 
 
 
