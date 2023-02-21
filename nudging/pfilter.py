@@ -164,7 +164,7 @@ class bootstrap_filter(base_filter):
         
        # forward model step
         for i in range(N):
-            self.model.randomize()
+            self.model.randomize(self.ensemble[i])
             self.model.run(self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
 
             Y = self.model.obs(self.ensemble[i])
