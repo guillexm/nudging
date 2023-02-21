@@ -92,7 +92,7 @@ class Camsholm(base_model):
         self.m1, self.u1 = self.w1.split()
     
     def run(self, X0, X1):
-        self.w0.assign(X0['State']
+        self.w0.assign(X0['State'])
         self.msolve.solve()
         for step in range(self.nsteps):
             self.dW1.assign(X0['Noise'+str(step)+'_'+str(0)])
@@ -106,7 +106,7 @@ class Camsholm(base_model):
 
 
     def obs(self, X0):
-        m, u = X0.split()
+        m, u = X0['State'].split()
         x_obs = np.arange(0.0,40.0)
         return np.array(u.at(x_obs))
 
@@ -116,8 +116,10 @@ class Camsholm(base_model):
         for i in range(self.nsteps):
             for j in range(4):
                 dW = Function(self.R)
-                dW.assign(rg.normal(self.R, 0., 1.0))
+                dW.assign(self.rg.normal(self.R, 0., 1.0))
                 particle.extend(dW) 
+        return particle 
+
 
     def randomize(self, X):
         rg = self.rg
