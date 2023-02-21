@@ -114,7 +114,7 @@ class base_filter(object, metaclass=ABCMeta):
                 if type(self.ensemble[ilocal] == 'list'):
                     for k in range(len(self.ensemble[ilocal])):
                         request_send = self.subcommunicators.isend(
-                            self.ensemble[ilocal][key],
+                            self.ensemble[ilocal][k],
                             dest=self.index2rank(target),
                             tag=1000*target+k)
                         mpi_requests.extend(request_send)
@@ -129,9 +129,9 @@ class base_filter(object, metaclass=ABCMeta):
             if type(self.ensemble[ilocal] == 'list'):
                 for k in range(len(self.ensemble[ilocal])):
                     request_recv = self.subcommunicators.irecv(
-                        self.new_ensemble[ilocal][key],
+                        self.new_ensemble[ilocal][k],
                         source=source_rank,
-                        tag=1000*target+k)
+                        tag=1000*iglobal+k)
                     mpi_requests.extend(request_recv)
             else:
                 request_recv = self.subcommunicators.irecv(
@@ -144,7 +144,8 @@ class base_filter(object, metaclass=ABCMeta):
         for i in range(self.nlocal):
             print(i, self.subcommunicators.ensemble_comm.rank,
                   self.subcommunicators.comm.rank)
-            self.ensemble[i].assign(self.new_ensemble[i])
+            for j in range(len(self.ensemble[i])):
+                self.ensemble[i][j].assign(self.new_ensemble[i][j])
 
 
 

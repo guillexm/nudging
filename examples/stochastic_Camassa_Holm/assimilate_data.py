@@ -24,7 +24,7 @@ u0_exp = (1+0.1)*0.2*2/(exp(x-403./15. + 0.01) + exp(-x+403./15. + 0.02)) \
     + (1+0.2)*0.5*2/(exp(x-203./15. + 0.03)+exp(-x+203./15. + 0.01))
 
 for i in range(nensemble[bfilter.ensemble_rank]):
-    _, u = bfilter.ensemble[i].split()
+    _, u = bfilter.ensemble[i][0].split()
     u.interpolate(u0_exp)
 
 def log_likelihood(dY):
