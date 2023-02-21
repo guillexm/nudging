@@ -16,7 +16,7 @@ class base_filter(object, metaclass=ABCMeta):
     def __init__(self):
         pass
 
-    def setup(self, nensemble, model):
+    def setup(self, nensemble, model, resampler_seed=34343):
         """
         Construct the ensemble
 
@@ -63,9 +63,9 @@ class base_filter(object, metaclass=ABCMeta):
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
             self.offset_list.append(sum(self.nensemble[:i_rank]))
-                
+       
         #a resampling method
-        self.resampler = residual_resampling
+        self.resampler = residual_resampling(seed=resampler_seed)
 
     def index2rank(self, index):
         for rank in range(len(self.offset_list)):
@@ -86,7 +86,7 @@ class base_filter(object, metaclass=ABCMeta):
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
-            s = self.resampler(weights, self.model)
+            s = self.resampler.resample(weights, self.model)
             for i in range(self.nglobal):
                 self.s_arr[i]=s[i]
 
@@ -159,18 +159,13 @@ class sim_filter(base_filter):
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
-    def __init__(self, nsteps, noise_shape):
-        self.nsteps = nsteps
-        self.noise_shape = noise_shape
-
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
         
        # forward model step
         for i in range(N):
-            W = np.random.randn(*(self.noise_shape))
-            self.model.run(self.nsteps, W,
-                             self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
+            self.model.randomize()
+            self.model.run(self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
 
             Y = self.model.obs(self.ensemble[i])
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)

@@ -5,11 +5,13 @@ from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
-    def __init__(self,n,dt = 0.01, alpha=1.0):
+    def __init__(self, n, nsteps, dt = 0.01, alpha=1.0, seed=12353):
 
         self.n = n
+        self.nsteps = nsteps
         self.alpha = alpha
         self.dt = dt
+        self.seed = seed
 
     def setup(self, comm = MPI.COMM_WORLD):
         self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
@@ -19,8 +21,7 @@ class Camsholm(base_model):
         self.V = FunctionSpace(self.mesh, "CG", 1)
         self.W = MixedFunctionSpace((self.V, self.V))
         self.w0 = Function(self.W)
-        self.m0, self.u0 = self.w0.split()
-       
+        self.m0, self.u0 = self.w0.split()       
 
         #Interpolate the initial condition
 
@@ -57,12 +58,18 @@ class Camsholm(base_model):
         self.fx4.interpolate(0.1*sin(4.*pi*self.x/8.))
 
         # with added term
-        self.dW1 = Constant(0)
-        self.dW2 = Constant(0)
-        self.dW3 = Constant(0)
-        self.dW4 = Constant(0)
+        self.R = FunctionSpace(self.mesh, "R", 0)
+        self.dW = []
+        for i in range(self.nsteps):
+            subdW = []
+            for j in range(4):
+                subdW.append(Function(self.R))
+            self.dW.append(subdW)
 
-
+        self.dW1 = Function(self.R)
+        self.dW2 = Function(self.R)
+        self.dW3 = Function(self.R)
+        self.dW4 = Function(self.R)
         self.Ln = self.fx1*self.dW1+self.fx2*self.dW2+self.fx3*self.dW3+self.fx4*self.dW4
         
         # finite element linear functional 
@@ -84,14 +91,14 @@ class Camsholm(base_model):
         self.m0, self.u0 = self.w0.split()
         self.m1, self.u1 = self.w1.split()
     
-    def run(self, nsteps, W, X0, X1):
+    def run(self, X0, X1):
         self.w0.assign(X0)
         self.msolve.solve()
-        for step in range(nsteps):
-            self.dW1.assign(W[step, 0])
-            self.dW2.assign(W[step, 1])
-            self.dW3.assign(W[step, 2])
-            self.dW4.assign(W[step, 3])
+        for step in range(self.nsteps):
+            self.dW1.assign(self.dW[step][0])
+            self.dW2.assign(self.dW[step][1])
+            self.dW3.assign(self.dW[step][2])
+            self.dW4.assign(self.dW[step][3])
 
             self.usolver.solve()
             self.w0.assign(self.w1)
@@ -106,3 +113,9 @@ class Camsholm(base_model):
 
     def allocate(self):        
         return Function(self.W)
+
+    def randomize(self):
+        rg = self.rg
+        for i in range(self.nsteps):
+            for j in range(4):
+                self.dW[i][j].assign(rg.normal(self.R, 0., 1.0))

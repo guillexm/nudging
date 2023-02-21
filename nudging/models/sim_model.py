@@ -7,8 +7,8 @@ import numpy as np
 
 class SimModel(base_model):
 
-    def __init__(self):
-        pass
+    def __init__(self, seed=64534):
+        self.seed = seed
 
     def setup(self, comm=MPI.COMM_WORLD):
         self.mesh = UnitSquareMesh(20,20, comm = comm)
@@ -23,3 +23,5 @@ class SimModel(base_model):
     def allocate(self):
         return Function(self.V)
 
+    def randomize(self):
+        pass

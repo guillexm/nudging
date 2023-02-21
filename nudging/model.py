@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import cached_property
-from firedrake import Function, FunctionSpace
+from firedrake import Function, FunctionSpace, PCG64, RandomGenerator
+import firedrake as fd
 
 class base_model(object, metaclass=ABCMeta):
     def __init__(self):
@@ -17,10 +18,8 @@ class base_model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def run(self, nsteps, W, X0, X1):
+    def run(self, X0, X1):
         """
-        nsteps - number of timesteps
-        W - an nsteps x k array containing random numbers
         X0 - a Firedrake Function containing the initial condition
         X1- a Firedrake Function to copy the result into
         """
@@ -48,6 +47,13 @@ class base_model(object, metaclass=ABCMeta):
         X - a Function of the required type
         """
         pass
+
+    @abstractmethod
+    def randomize(self):
+        """
+        Set the noise variables to new random numbers
+        """
+        pass
     
 
     @cached_property
@@ -59,3 +65,8 @@ class base_model(object, metaclass=ABCMeta):
         R = FunctionSpace(self.mesh, "R", 0)
         U = Function(R)
         return U
+
+    @cached_property
+    def rg(self):
+        pcg = PCG64(seed=self.seed)
+        return RandomGenerator(pcg)

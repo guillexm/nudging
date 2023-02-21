@@ -12,15 +12,14 @@ Pick initial conditon
 run model, get obseravation
 add observation noise N(0, sigma^2)
 """
-
-model = Camsholm(100)
+nsteps = 5
+model = Camsholm(100, nsteps)
 model.setup()
 X_truth = model.allocate()
 _, u0 = X_truth.split()
 x, = SpatialCoordinate(model.mesh)
 u0.interpolate(0.2*2/(exp(x-403./15.) + exp(-x+403./15.)) + 0.5*2/(exp(x-203./15.)+exp(-x+203./15.)))
 
-nsteps = 5
 N_obs = 5
 
 y_true = model.obs(X_truth)
@@ -28,8 +27,8 @@ y_obs_full = np.zeros((N_obs, np.size(y_true)))
 y_true_full = np.zeros((N_obs, np.size(y_true)))
 
 for i in range(N_obs):
-    W_truth = np.random.randn(nsteps, 4)
-    model.run(nsteps, W_truth, X_truth, X_truth)
+    model.randomize()
+    model.run(X_truth, X_truth)
     y_true = model.obs(X_truth)
 
     y_true_full[i,:] = y_true
