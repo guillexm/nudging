@@ -13,7 +13,7 @@ nsteps = 5
 model = Camsholm(100, nsteps)
 
 
-bfilter = bootstrap_filter()
+bfilter = jittertemp_filter(n_temp=4, n_jitt = 10, rho= 0.4)
 
 
 nensemble = [3,2,5,4]
@@ -33,11 +33,13 @@ def log_likelihood(dY):
 #Load data
 y_exact = np.load('y_true.npy')
 N_obs = y_exact.shape[0]
-
+print("N_obs", N_obs)
 y = np.load('y_obs.npy') 
 
 # do assimiliation step
 for k in range(N_obs):
-    PETSc.Sys.Print("Step", k)
+    print("Step", k)
+    #print(bfilter.theta_temper)
     bfilter.assimilation_step(y[k,:], log_likelihood)
+
 

@@ -221,12 +221,14 @@ class jittertemp_filter(base_filter):
                     Y = self.model.obs(self.new_ensemble[i])
                     weights[i] = exp(-dtheta*log_likelihood(y-Y))
                 weights /= np.sum(weights)
+                print("weights", weights)
                 ess = 1/np.sum(weights**2)
                 if ess < ess_tol*N:
                     dtheta = 0.5*dtheta
             self.ess_temper.append(ess)
             theta += dtheta
             self.theta_temper.append(theta)
+            print("theta_list", self.theta_temper)
 
             # resampling BEFORE jittering
             self.parallel_resample()

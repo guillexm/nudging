@@ -74,5 +74,5 @@ class base_model(object, metaclass=ABCMeta):
         return RandomGenerator(pcg)
 
     def copy(self, Xin, Xout):
-        for i in range(Xin):
+        for i in range(len(Xin)):
             Xout[i].assign(Xin[i])
