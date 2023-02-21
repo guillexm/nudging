@@ -111,18 +111,34 @@ class base_filter(object, metaclass=ABCMeta):
                   targets, flush=True)
 
             for target in targets:
-                request_send = self.subcommunicators.isend(
-                    self.ensemble[ilocal],
-                    dest=self.index2rank(target),
-                    tag=target)
-                mpi_requests.extend(request_send)
+                if type(self.ensemble[ilocal] == 'dict'):
+                    for key, item in self.ensemble[ilocal].iteritems():
+                        request_send = self.subcommunicators.isend(
+                            self.ensemble[ilocal][key],
+                            dest=self.index2rank(target),
+                            tag=str(target)+str(key))
+                        mpi_requests.extend(request_send)
+                else:
+                    request_send = self.subcommunicators.isend(
+                        self.ensemble[ilocal],
+                        dest=self.index2rank(target),
+                        tag=target)
+                    mpi_requests.extend(request_send)
 
             source_rank = self.index2rank(s_copy[iglobal])
-            request_recv = self.subcommunicators.irecv(
-                self.new_ensemble[ilocal],
-                source=source_rank,
-                tag=iglobal)
-            mpi_requests.extend(request_recv)
+            if type(self.ensemble[ilocal] == 'dict'):
+                for key, item in self.ensemble[ilocal].iteritems():
+                    request_recv = self.subcommunicators.irecv(
+                        self.new_ensemble[ilocal][key],
+                        source=source_rank,
+                        tag=str(iglobal)+str(key))
+                    mpi_requests.extend(request_recv)
+            else:
+                request_recv = self.subcommunicators.irecv(
+                    self.new_ensemble[ilocal],
+                    source=source_rank,
+                    tag=iglobal)
+                mpi_requests.extend(request_recv)
 
         MPI.Request.Waitall(mpi_requests)
         for i in range(self.nlocal):
