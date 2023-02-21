@@ -9,10 +9,11 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
 """ read obs from saved file 
     Do assimilation step for tempering and jittering steps 
 """
-model = Camsholm(100)
+nsteps = 5
+model = Camsholm(100, nsteps)
 
 
-bfilter = bootstrap_filter(5, (5,4))
+bfilter = bootstrap_filter()
 
 
 nensemble = [3,2,5,4]
