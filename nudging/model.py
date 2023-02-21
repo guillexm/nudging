@@ -49,9 +49,11 @@ class base_model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def randomize(self):
+    def randomize(self, c1=0, c2=1):
         """
-        Set the noise variables to new random numbers
+        replace dW_o <- c1*dW_o + c2*dW_n
+        where dW_o is the old noise and 
+        dW_n is the new noise
         """
         pass
     
@@ -70,3 +72,7 @@ class base_model(object, metaclass=ABCMeta):
     def rg(self):
         pcg = PCG64(seed=self.seed)
         return RandomGenerator(pcg)
+
+    def copy(self, Xin, Xout):
+        for i in range(Xin):
+            Xout[i].assign(Xin[i])

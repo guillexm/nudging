@@ -40,9 +40,11 @@ class base_filter(object, metaclass=ABCMeta):
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
         self.ensemble = []
         self.new_ensemble = []
+        self.proposal_ensemble = []
         for i in range(self.nensemble[self.ensemble_rank]):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
+            self.proposal_ensemble.append(model.allocate())
 
         # some numbers for shared array and owned array
         self.nlocal = self.nensemble[self.ensemble_rank]
@@ -211,8 +213,7 @@ class jittertemp_filter(base_filter):
             # forward model step
             for i in range(N):
                 # put result of forward model into new_ensemble
-                self.model.run(self.nsteps, W[i, :],
-                               self.ensemble[i], self.new_ensemble[i])
+                self.model.run(self.ensemble[i], self.new_ensemble[i])
             ess = 0.
             while ess < ess_tol*N:
                 for i in range(N):
@@ -227,28 +228,22 @@ class jittertemp_filter(base_filter):
             self.theta_temper.append(theta)
 
             # resampling BEFORE jittering
-            s = residual_resampling(weights, model=SimModel)
-            self.e_s = s
-            if self.verbose:
-                print("Updating ensembles")
-            for i in range(N):
-                self.new_ensemble[i].assign(self.ensemble[s[i]])
-                Wnew[i, :] = W[s[i], :]
-            for i in range(N):
-                self.ensemble[i].assign(self.new_ensemble[i])
-                W[i, :] = Wnew[i, :]
+            self.parallel_resample()
 
             for l in range(self.n_jitt): # Jittering loop
                 if self.verbose:
                     print("Jitter, Temper step", l, k)
-                # proposal
-                Wnew = self.rho*W + (1-self.rho**2)**0.5*np.random.randn(N, *(self.noise_shape))
 
                 # forward model step
                 for i in range(N):
+                    # proposal
+                    self.model.copy(self.ensemble[i],
+                                    self.proposal_ensemble[i])
+                    self.model.randomize(self.proposal_ensemble[i],
+                                         self.rho, (1-self.rho**2)**0.5)
                     # put result of forward model into new_ensemble
-                    self.model.run(self.nsteps, Wnew[i, :],
-                                   self.ensemble[i], self.new_ensemble[i])
+                    self.model.run(self.proposal_ensemble[i],
+                                   self.new_ensemble[i])
 
                     # particle weights
                     Y = self.model.obs(self.new_ensemble[i])
@@ -261,14 +256,14 @@ class jittertemp_filter(base_filter):
                         #accept or reject tool
                         if np.random.rand() < p_accept:
                             weights[i] = new_weights[i]
-                            W[i,:] = Wnew[i,:]
+                            self.model.copy(self.proposal_ensemble[i],
+                                            self.ensemble[i])
 
                 weights /= np.sum(weights)
                 self.e_weight = weights
 
         if self.verbose:
             print("Advancing ensemble")
-        self.model.run(self.nsteps, W[i, :],
-                                   self.ensemble[i], self.ensemble[i])
+        self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
             print("assimilation step complete")
