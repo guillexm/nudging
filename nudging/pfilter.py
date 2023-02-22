@@ -77,13 +77,13 @@ class base_filter(object, metaclass=ABCMeta):
                 break
         return rank
         
-    def parallel_resample(self):
+    def parallel_resample(self, dtheta=1):
         
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             weights = self.weight_arr.data()
             # renormalise
-            weights = np.exp(-weights)
+            weights = np.exp(-dtheta*weights)
             weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
 
@@ -223,10 +223,12 @@ class jittertemp_filter(base_filter):
                 if ess < ess_tol*N:
                     dtheta = 0.5*dtheta
 
+            # abusing owned array to send dtheta
+            # to all ensemble members
             for i in range(self.nglobal):
                 self.dtheta_arr[i]=dtheta
 
-        # broadcast protocol to every rank
+        # broadcast dtheta to every rank
         self.dtheta_arr.synchronise()
         dtheta = self.dtheta_arr.data()[0]
         return dtheta
@@ -278,16 +280,14 @@ class jittertemp_filter(base_filter):
                     if l == 0:
                         weights[i] = new_weights[i]
                     else:
-                        #  Metropolis MCMC
+                        # Metropolis MCMC
                         p_accept = min(1, new_weights[i]/weights[i])
-                        #accept or reject tool
-                        if np.random.rand() < p_accept:
+                        # accept or reject tool
+                        u = model.rg.uniform(self.R, 0., 1.0)
+                        if u.dat.data[:] < p_accept:
                             weights[i] = new_weights[i]
                             self.model.copy(self.proposal_ensemble[i],
                                             self.ensemble[i])
-
-                weights /= np.sum(weights)
-                self.e_weight = weights
 
         if self.verbose:
             print("Advancing ensemble")

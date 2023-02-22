@@ -57,6 +57,14 @@ class base_model(object, metaclass=ABCMeta):
         """
         pass
     
+    @cached_property
+    def R(self):
+        """
+        An R space to deal with uniform random numbers
+        for resampling etc
+        """
+        R = FunctionSpace(self.mesh, "R", 0)
+        return R
 
     @cached_property
     def U(self):
@@ -64,8 +72,7 @@ class base_model(object, metaclass=ABCMeta):
         An R space function to deal with uniform random numbers
         for resampling
         """
-        R = FunctionSpace(self.mesh, "R", 0)
-        U = Function(R)
+        U = Function(self.R)
         return U
 
     @cached_property
