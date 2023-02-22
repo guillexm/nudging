@@ -27,7 +27,7 @@ class base_filter(object, metaclass=ABCMeta):
         self.nensemble = nensemble
         n_ensemble_partitions = len(nensemble)
         self.nspace = int(COMM_WORLD.size/n_ensemble_partitions)
-        print(self.nspace, n_ensemble_partitions, COMM_WORLD.size, 'bsdfdf')
+        #print(self.nspace, n_ensemble_partitions, COMM_WORLD.size, 'bsdfdf')
         assert(self.nspace*n_ensemble_partitions == COMM_WORLD.size)
 
         self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
@@ -66,7 +66,7 @@ class base_filter(object, metaclass=ABCMeta):
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
             self.offset_list.append(sum(self.nensemble[:i_rank]))
-       
+        #print(self.offset_list)
         #a resampling method
         self.resampler = residual_resampling(seed=resampler_seed)
 
@@ -97,6 +97,8 @@ class base_filter(object, metaclass=ABCMeta):
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
         self.s_copy = s_copy
+        #print('=========================================Rank====================================', self.ensemble_rank)
+        #print("S", s_copy)
 
         mpi_requests = []
         
@@ -108,10 +110,10 @@ class base_filter(object, metaclass=ABCMeta):
             for j in range(self.s_arr.size):
                 if s_copy[j] == iglobal:
                     targets.append(j)
-            print('Target', "rank", self.ensemble_rank,
-                  "ilocal", ilocal,
-                  "iglobal", iglobal,
-                  targets, flush=True)
+            # print('Target', "rank", self.ensemble_rank,
+            #       "ilocal", ilocal,
+            #       "iglobal", iglobal,
+            #       targets, flush=True)
 
             for target in targets:
                 if type(self.ensemble[ilocal] == 'list'):
@@ -145,8 +147,7 @@ class base_filter(object, metaclass=ABCMeta):
 
         MPI.Request.Waitall(mpi_requests)
         for i in range(self.nlocal):
-            print(i, self.subcommunicators.ensemble_comm.rank,
-                  self.subcommunicators.comm.rank)
+            #print(i, self.subcommunicators.ensemble_comm.rank, self.subcommunicators.comm.rank)
             for j in range(len(self.ensemble[i])):
                 self.ensemble[i][j].assign(self.new_ensemble[i][j])
 
@@ -185,7 +186,7 @@ class bootstrap_filter(base_filter):
        # forward model step
         for i in range(N):
             self.model.randomize(self.ensemble[i])
-            self.model.run(self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
+            self.model.run(self.ensemble[i], self.ensemble[i])   
 
             Y = self.model.obs(self.ensemble[i])
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
@@ -209,21 +210,42 @@ class jittertemp_filter(base_filter):
                                      comm=self.subcommunicators.ensemble_comm,
                                      owner=0)
 
-    def adaptive_dtheta(self, dtheta, ess_tol):
+    def adaptive_dtheta(self, dtheta, theta, ess_tol):
         N = self.nensemble[self.ensemble_rank]
+        dtheta_list = []
+        ttheta_list = []
+        ess_list = []
+        esstheta_list = []
+        ttheta = 0
+        #M = sum(self.nensemble)
+        #print(M)
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             logweights = self.weight_arr.data()
             ess =0.
-            while ess < ess_tol*N:
+            ess_theta = 0.
+            theta_weight = []
+            while ess < ess_tol*sum(self.nensemble):
                 # renormalise using dtheta
                 weights = np.exp(-dtheta*logweights)
                 weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
+                ess_list.append(ess)
+            
 
-                if ess < ess_tol*N:
+                if ess < ess_tol*sum(self.nensemble):
                     dtheta = 0.5*dtheta
-
+                ttheta += dtheta
+                ttheta_list.append(ttheta)
+                theta_weight = np.exp(-ttheta*logweights)
+                theta_weight /= np.sum(theta_weight)
+                ess_theta = 1/np.sum(theta_weight**2)
+                esstheta_list.append(ess_theta)
+                dtheta_list.append(dtheta)
+            print("dtheta_list", dtheta_list)
+            print("ttheta_list", ttheta_list)
+            print("ess_dtheta", ess_list)
+            #print("ess_theta", esstheta_list)
             # abusing owned array to send dtheta
             # to all ensemble members
             for i in range(self.nglobal):
@@ -232,6 +254,8 @@ class jittertemp_filter(base_filter):
         # broadcast dtheta to every rank
         self.dtheta_arr.synchronise()
         dtheta = self.dtheta_arr.data()[0]
+        theta += dtheta
+        #print(theta)
         return dtheta
 
         
@@ -253,10 +277,10 @@ class jittertemp_filter(base_filter):
                 self.weight_arr.dlocal[i] = log_likelihood(y-Y)
 
             # adaptive dtheta choice
-            dtheta = self.adaptive_dtheta(dtheta,ess_tol)
+            dtheta = self.adaptive_dtheta(dtheta, theta,  ess_tol)
             theta += dtheta
             self.theta_temper.append(theta)
-            print("theta_list", self.theta_temper)
+            #print("theta_list", self.theta_temper)
 
             # resampling BEFORE jittering
             self.parallel_resample()
