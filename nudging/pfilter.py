@@ -209,11 +209,12 @@ class jittertemp_filter(base_filter):
                                      comm=self.subcommunicators.ensemble_comm,
                                      owner=0)
 
-    def adaptive_dtheta(self, dtheta):
+    def adaptive_dtheta(self, dtheta, ess_tol):
+        N = self.nensemble[self.ensemble_rank]
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             logweights = self.weight_arr.data()
-
+            ess =0.
             while ess < ess_tol*N:
                 # renormalise using dtheta
                 weights = np.exp(-dtheta*logweights)
@@ -234,9 +235,10 @@ class jittertemp_filter(base_filter):
         return dtheta
 
         
-    def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
+    def assimilation_step(self, y, log_likelihood,  ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
         weights = np.zeros(N)
+        new_weights = np.zeros(N)
         self.ess_temper = []
         self.theta_temper = []
 
@@ -251,7 +253,7 @@ class jittertemp_filter(base_filter):
                 self.weight_arr.dlocal[i] = log_likelihood(y-Y)
 
             # adaptive dtheta choice
-            dtheta = self.adaptive_dtheta(dtheta)
+            dtheta = self.adaptive_dtheta(dtheta,ess_tol)
             theta += dtheta
             self.theta_temper.append(theta)
             print("theta_list", self.theta_temper)
