@@ -285,7 +285,7 @@ class jittertemp_filter(base_filter):
                         # Metropolis MCMC
                         p_accept = min(1, new_weights[i]/weights[i])
                         # accept or reject tool
-                        u = model.rg.uniform(self.R, 0., 1.0)
+                        u = self.model.rg.uniform(self.model.R, 0., 1.0)
                         if u.dat.data[:] < p_accept:
                             weights[i] = new_weights[i]
                             self.model.copy(self.proposal_ensemble[i],
