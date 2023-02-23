@@ -39,7 +39,7 @@ class base_model(object, metaclass=ABCMeta):
         obs_list = self.obs_symbolic(X0)
         Y = np.zeros((len(obs_list),))
         for i in range(len(obs_list)):
-            Y[i] = assemble(obs_list)
+            Y[i] = fd.assemble(obs_list[i])
         return Y
 
     @abstractmethod

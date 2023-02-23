@@ -110,8 +110,8 @@ class Camsholm(base_model):
         m, u = split(X0[0])
         x_obs = np.arange(0.0,40.0)
         obs_list = []
-        for i in x_obs:
-            obs_list.append(u*exp(-(self.x - Constant(x_obs[i]))**2/2))
+        for xi in x_obs:
+            obs_list.append(u*exp(-(self.x - Constant(xi))**2/2)*dx)
         return obs_list
 
 
