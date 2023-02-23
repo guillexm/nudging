@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import cached_property
 from firedrake import Function, FunctionSpace, PCG64, RandomGenerator
 import firedrake as fd
+import numpy as np
 
 class base_model(object, metaclass=ABCMeta):
     def __init__(self):
@@ -25,18 +26,35 @@ class base_model(object, metaclass=ABCMeta):
         """
         pass
 
-    @abstractmethod
     def obs(self,X0):
         """
         Observation operator
 
-        X0 - a Firedrake Function containing the initial condition
+        X0 - an ensemble state
 
         returns
 
-        y - a k-dimensional numpy array of the observations
+        obs - a numpy array of the observations from X0
+        """
+        obs_list = self.obs_symbolic(X0)
+        Y = np.zeros((len(obs_list),))
+        for i in range(len(obs_list)):
+            Y[i] = assemble(obs_list)
+        return Y
+
+    @abstractmethod
+    def obs_symbolic(self, X0):
+        """
+        Symbolic observation operator
+        
+        X0 - an ensemble state
+
+        return
+
+        obs_list - a list of observation expressions
         """
         pass
+    
 
     @abstractmethod
     def allocate(self):

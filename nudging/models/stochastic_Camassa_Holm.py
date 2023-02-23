@@ -106,10 +106,13 @@ class Camsholm(base_model):
         X1[0].assign(self.w0) # save sol at the nstep th time 
 
 
-    def obs(self, X0):
-        m, u = X0[0].split()
+    def obs_symbolic(self, X0):
+        m, u = split(X0[0])
         x_obs = np.arange(0.0,40.0)
-        return np.array(u.at(x_obs))
+        obs_list = []
+        for i in x_obs:
+            obs_list.append(u*exp(-(self.x - Constant(x_obs[i]))**2/2))
+        return obs_list
 
 
     def allocate(self):

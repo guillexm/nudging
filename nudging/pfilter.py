@@ -182,8 +182,7 @@ class sim_filter(base_filter):
 class bootstrap_filter(base_filter):
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
-        
-       # forward model step
+        # forward model step
         for i in range(N):
             self.model.randomize(self.ensemble[i])
             self.model.run(self.ensemble[i], self.ensemble[i])   
@@ -191,7 +190,6 @@ class bootstrap_filter(base_filter):
             Y = self.model.obs(self.ensemble[i])
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
         self.parallel_resample()
-
 
 
 class jittertemp_filter(base_filter):
