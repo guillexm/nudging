@@ -35,9 +35,26 @@ y_exact = np.load('y_true.npy')
 N_obs = y_exact.shape[0]
 
 y = np.load('y_obs.npy') 
+plt.plot(y[:,10], 'b-', label = 'y_obs')
+
+y_ensemble = np.zeros((N_obs, sum(nensemble), y.shape[1]))
+y_ensemble_mean = np.zeros((N_obs, sum(nensemble)))
 
 # do assimiliation step
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
     bfilter.assimilation_step(y[k,:], log_likelihood)
+
+    for e in range(sum(nensemble)):
+        y_ensemble[k,e,:] = model.obs(bfilter.ensemble[e][0])
+
+y_ensemble_mean = np.mean(y_ensemble_mean[:,:,10], axis=1)
+
+#print(y_e_mean)
+plt.plot(y_ensemble[:,:,10], 'y_ensemble')
+plt.plot(y_ensemble_mean, 'g-', label='y_ensemble_mean')
+#plt.plot(y_e_var, 'r-', label='y_ensemble_std')
+plt.title('Ensemble prediction with N_ensemble = ' +str(nensemble))
+plt.show()
+
 
