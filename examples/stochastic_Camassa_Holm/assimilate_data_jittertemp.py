@@ -3,6 +3,7 @@ from nudging import *
 import numpy as np
 import matplotlib.pyplot as plt
 from firedrake.petsc import PETSc
+from pyadjoint import AdjFloat
 
 from nudging.models.stochastic_Camassa_Holm import Camsholm
 
@@ -27,15 +28,18 @@ for i in range(nensemble[bfilter.ensemble_rank]):
     _, u = bfilter.ensemble[i][0].split()
     u.interpolate(u0_exp)
 
-def log_likelihood(dY):
-    return np.dot(dY, dY)/0.05**2/2
+def log_likelihood(y, Y):
+    ll = 0.
+    for i in range(len(Y)):
+        ll += (AdjFloat(y[i])-Y[i])**2/0.05**2/2
+    return ll
 
 def log_likelihood_symbolic(y,Y):
     for i in range(len(Y)):
         if i == 0:
-            ll = (Constant(y[0])-Y[0])**2/0.05**2/2
+            ll = (AdjFloat(y[0])-Y[0])**2/0.05**2/2
         else:
-            ll += (Constant(y[i])-Y[i])**2/0.05**2/2
+            ll += (AdjFloat(y[i])-Y[i])**2/0.05**2/2
     return ll
     
 #Load data

@@ -8,7 +8,7 @@ from scipy.special import logsumexp
 from firedrake.petsc import PETSc
 import pyadjoint
 from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
-
+from firedrake_adjoint import *
 pyadjoint.tape.pause_annotation()
 
 class base_filter(object, metaclass=ABCMeta):
@@ -178,7 +178,7 @@ class sim_filter(base_filter):
             self.ensemble[i].assign(self.offset_list[self.ensemble_rank]+i)
 
             Y = self.model.obs()
-            self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+            self.weight_arr.dlocal[i] = log_likelihood(y,Y)
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
@@ -190,7 +190,7 @@ class bootstrap_filter(base_filter):
             self.model.run(self.ensemble[i], self.ensemble[i])   
 
             Y = self.model.obs()
-            self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+            self.weight_arr.dlocal[i] = log_likelihood(y,Y)
         self.parallel_resample()
 
 
@@ -277,7 +277,7 @@ class jittertemp_filter(base_filter):
                 # put result of forward model into new_ensemble
                 self.model.run(self.ensemble[i], self.new_ensemble[i])
                 Y = self.model.obs()
-                self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+                self.weight_arr.dlocal[i] = log_likelihood(y,Y)
 
             # adaptive dtheta choice
             dtheta = self.adaptive_dtheta(dtheta, theta,  ess_tol)
@@ -302,14 +302,17 @@ class jittertemp_filter(base_filter):
                                            self.new_ensemble[i])
                             obs_list = self.model.obs_symbolic()
                             #set the controls
-                            m = self.model.controls()
+                            self.m = self.model.controls()
                             #requires log_likelihood to return symbolic
-                            self.MALA_J = self.log_likelihood_symbolic(y, obs_list)
-                            Jhat = ReducedFunctional(self.MALA_J, m)
+                            Y = []
+                            for j in range(len(obs_list)):
+                                Y.append(assemble(obs_list[j]))
+                            self.MALA_J = log_likelihood(y,Y)
+                            Jhat = ReducedFunctional(self.MALA_J, self.m)
                             pyadjoint.tape.pause_annotation()
-
                         # run the model and get the functional value with
                         # ensemble[i]
+                        print(type(self.MALA_J))
                         Jhat(self.ensemble[i])
                         print(self.ensemble_rank, Jhat)
                         # use the taped model to get the derivative
@@ -334,7 +337,7 @@ class jittertemp_filter(base_filter):
 
                     # particle weights
                     Y = self.model.obs()
-                    new_weights[i] = exp(-theta*log_likelihood(y-Y))
+                    new_weights[i] = exp(-theta*log_likelihood(y,Y))
                     if l == 0:
                         weights[i] = new_weights[i]
                     else:

@@ -118,7 +118,7 @@ class Camsholm(base_model):
         controls_list = []
         for i in range(len(self.X)):
             controls_list.append(Control(self.X[i]))
-            return controls_list
+        return controls_list
         
     def obs_symbolic(self):
         m, u = self.w0
