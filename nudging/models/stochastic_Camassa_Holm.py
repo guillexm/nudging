@@ -1,5 +1,5 @@
 from firedrake import *
-from firedrake adjoint import *
+from firedrake_adjoint import *
 from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from nudging.model import *
@@ -94,7 +94,10 @@ class Camsholm(base_model):
         # Data save
         self.m0, self.u0 = self.w0.split()
         self.m1, self.u1 = self.w1.split()
-    
+
+        # state for controls
+        self.X = self.allocate()
+
     def run(self, X0, X1):
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
