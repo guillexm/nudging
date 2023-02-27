@@ -194,11 +194,13 @@ class bootstrap_filter(base_filter):
 
 class jittertemp_filter(base_filter):
     def __init__(self, n_temp, n_jitt, rho,
-                 verbose=False):
+                 verbose=False, MALA=False):
         self.n_temp = n_temp
         self.n_jitt = n_jitt
         self.rho = rho
         self.verbose=verbose
+        self.MALA = MALA
+        self.model_taped = False
 
     def setup(self, nensemble, model, resampler_seed=34343):
         super(jittertemp_filter, self).setup(
@@ -290,10 +292,28 @@ class jittertemp_filter(base_filter):
                 # forward model step
                 for i in range(N):
                     # proposal
-                    self.model.copy(self.ensemble[i],
-                                    self.proposal_ensemble[i])
-                    self.model.randomize(self.proposal_ensemble[i],
-                                         self.rho, (1-self.rho**2)**0.5)
+                    if MALA:
+                        if not model_taped:
+                            pyadjoint.tape.continue_annotation()
+                            self.model.run(self.ensemble[i],
+                                           self.new_ensemble[i])
+                            self.MALA_J = self.model.noise_penalty()
+                            obs_list = self.model.obs_symbolic()
+                            #requires log_likelihood to return symbolic
+                            self.MALA_J += self.log_likelihood(obs_list)
+                            pyadjoint.tape.pause_annotation()
+                        #set the controls
+                        m = []
+                        for var in self.ensemble[i]:
+                            m.append(Control(var))
+                        # use the taped model to get the derivative
+                        
+                    else:
+                        self.model.copy(self.ensemble[i],
+                                        self.proposal_ensemble[i])
+                        self.model.randomize(self.proposal_ensemble[i],
+                                             self.rho,
+                                             (1-self.rho**2)**0.5)
                     # put result of forward model into new_ensemble
                     self.model.run(self.proposal_ensemble[i],
                                    self.new_ensemble[i])
