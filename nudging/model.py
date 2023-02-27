@@ -26,17 +26,14 @@ class base_model(object, metaclass=ABCMeta):
         """
         pass
 
-    def obs(self,X0):
+    def obs(self):
         """
         Observation operator
-
-        X0 - an ensemble state
-
         returns
 
-        obs - a numpy array of the observations from X0
+        obs - a numpy array of the observations from current model state
         """
-        obs_list = self.obs_symbolic(X0)
+        obs_list = self.obs_symbolic()
         Y = np.zeros((len(obs_list),))
         for i in range(len(obs_list)):
             Y[i] = fd.assemble(obs_list[i])
