@@ -51,8 +51,7 @@ y = np.load('y_obs.npy')
 
 # do assimiliation step
 for k in range(N_obs):
-    #PETSc.Sys.Print("Step", k)
-    #print(bfilter.theta_temper)
+    PETSc.Sys.Print("Step", k)
     if MALA:
         bfilter.assimilation_step(y[k,:], log_likelihood, log_likelihood_symbolic)
     else:
