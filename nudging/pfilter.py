@@ -322,7 +322,7 @@ class jittertemp_filter(base_filter):
                         self.model.randomize(self.proposal_ensemble[i],
                                              Constant((2-self.rho)/(2+self.rho)),
                                              Constant(2*self.rho/(2+self.rho)),
-                                             gscale=Constant((-8*self.rho)**0.5/(2+self.rho)),g=g)
+                                             gscale=Constant(-(8*self.rho)**0.5/(2+self.rho)),g=g)
                     else:
                         # proposal PCN
                         self.model.copy(self.ensemble[i],
