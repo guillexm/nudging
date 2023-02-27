@@ -1,8 +1,12 @@
 from firedrake import *
+from firedrake adjoint import *
 from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from nudging.model import *
 import numpy as np
+import pyadjoint
+
+pyadjoint.tape.pause_annotation()
 
 class Camsholm(base_model):
     def __init__(self, n, nsteps, dt = 0.01, alpha=1.0, seed=12353):
@@ -92,20 +96,27 @@ class Camsholm(base_model):
         self.m1, self.u1 = self.w1.split()
     
     def run(self, X0, X1):
-        self.w0.assign(X0[0])
+        for i in range(len(X0)):
+            self.X[i].assign(X0[i])
+        self.w0.assign(self.X[0])
         self.msolve.solve()
         for step in range(self.nsteps):
             #print(type(self.dW1), type(X0[4*step]))
-            self.dW1.assign(X0[4*step+1])
-            self.dW2.assign(X0[4*step+2])
-            self.dW3.assign(X0[4*step+3])
-            self.dW4.assign(X0[4*step+4])
+            self.dW1.assign(self.X[4*step+1])
+            self.dW2.assign(self.X[4*step+2])
+            self.dW3.assign(self.X[4*step+3])
+            self.dW4.assign(self.X[4*step+4])
 
             self.usolver.solve()
             self.w0.assign(self.w1)
         X1[0].assign(self.w0) # save sol at the nstep th time 
 
-
+    def controls(self):
+        controls_list = []
+        for i in range(len(self.X)):
+            controls_list.append(Control(self.X[i]))
+            return controls_list
+        
     def obs_symbolic(self, X0):
         m, u = split(X0[0])
         x_obs = np.arange(0.0,40.0)
@@ -125,10 +136,12 @@ class Camsholm(base_model):
         return particle 
 
 
-    def randomize(self, X, c1=0, c2=1):
+    def randomize(self, X, c1=0, c2=1, g=None):
         rg = self.rg
         count = 0
         for i in range(self.nsteps):
             for j in range(4):
                 count += 1
                 X[count].assign(c1*X[count] + c2*rg.normal(self.R, 0., 1.0))
+                if g:
+                    X[count] += g[count]

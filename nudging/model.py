@@ -93,6 +93,12 @@ class base_model(object, metaclass=ABCMeta):
         U = Function(self.R)
         return U
 
+    @abstractmethod
+    def controls(self):
+        """
+        Return a list of the inputs to the model as Controls.
+        """
+
     @cached_property
     def rg(self):
         pcg = PCG64(seed=self.seed)

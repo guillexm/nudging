@@ -6,8 +6,10 @@ from .resampling import *
 import numpy as np
 from scipy.special import logsumexp
 from firedrake.petsc import PETSc
-
+import pyadjoint
 from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
+
+pyadjoint.tape.pause_annotation()
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
@@ -291,24 +293,35 @@ class jittertemp_filter(base_filter):
 
                 # forward model step
                 for i in range(N):
-                    # proposal
                     if MALA:
                         if not model_taped:
+                            model_taped = True
                             pyadjoint.tape.continue_annotation()
                             self.model.run(self.ensemble[i],
                                            self.new_ensemble[i])
-                            self.MALA_J = self.model.noise_penalty()
                             obs_list = self.model.obs_symbolic()
+                            #set the controls
+                            m = self.model.controls()
                             #requires log_likelihood to return symbolic
-                            self.MALA_J += self.log_likelihood(obs_list)
+                            self.MALA_J = self.log_likelihood(obs_list)
+                            Jhat = ReducedFunctional(self.MALA_J, m)
                             pyadjoint.tape.pause_annotation()
-                        #set the controls
-                        m = []
-                        for var in self.ensemble[i]:
-                            m.append(Control(var))
+
+                        # run the model and get the functional value with
+                        # ensemble[i]
+                        Jhat(self.ensemble[i])
+                        print(self.ensemble_rank, Jhat)
                         # use the taped model to get the derivative
-                        
+                        g = Jhat.derivative()
+                        # proposal
+                        self.model.copy(self.ensemble[i],
+                                        self.proposal_ensemble[i])
+                        self.model.randomize(self.proposal_ensemble[i],
+                                             Constant((2-self.rho)/(2+self.rho)),
+                                             Constant(2*self.rho/(2+self.rho)),
+                                             Constant((8*self.rho)**0.5/(2+self.rho))*g)
                     else:
+                        # proposal PCN
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
                         self.model.randomize(self.proposal_ensemble[i],
@@ -325,7 +338,10 @@ class jittertemp_filter(base_filter):
                         weights[i] = new_weights[i]
                     else:
                         # Metropolis MCMC
-                        p_accept = min(1, new_weights[i]/weights[i])
+                        if MALA:
+                            p_accept = 1
+                        else:
+                            p_accept = min(1, new_weights[i]/weights[i])
                         # accept or reject tool
                         u = self.model.rg.uniform(self.model.R, 0., 1.0)
                         if u.dat.data[:] < p_accept:
