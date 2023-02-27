@@ -4,9 +4,6 @@ from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from nudging.model import *
 import numpy as np
-import pyadjoint
-
-pyadjoint.tape.pause_annotation()
 
 class Camsholm(base_model):
     def __init__(self, n, nsteps, dt = 0.01, alpha=1.0, seed=12353):
@@ -104,7 +101,6 @@ class Camsholm(base_model):
         self.w0.assign(self.X[0])
         self.msolve.solve()
         for step in range(self.nsteps):
-            #print(type(self.dW1), type(X0[4*step]))
             self.dW1.assign(self.X[4*step+1])
             self.dW2.assign(self.X[4*step+2])
             self.dW3.assign(self.X[4*step+3])

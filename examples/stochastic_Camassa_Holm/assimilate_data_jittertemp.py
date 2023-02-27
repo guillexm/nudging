@@ -10,6 +10,7 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
 """ read obs from saved file 
     Do assimilation step for tempering and jittering steps 
 """
+
 nsteps = 5
 model = Camsholm(100, nsteps)
 MALA = True

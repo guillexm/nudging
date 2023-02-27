@@ -306,7 +306,6 @@ class jittertemp_filter(base_filter):
                             #requires log_likelihood to return symbolic
                             Y = []
                             for j in range(len(obs_list)):
-                                print(type(assemble(obs_list[j])))
                                 Y.append(assemble(obs_list[j]))
                             self.MALA_J = log_likelihood(y,Y)
                             Jhat = ReducedFunctional(self.MALA_J, self.m)
@@ -314,7 +313,6 @@ class jittertemp_filter(base_filter):
                         #pyadjoint.get_working_tape().visualise(open_in_browser=True)
                         # run the model and get the functional value with
                         # ensemble[i]
-                        print(type(self.MALA_J))
                         Jhat(self.ensemble[i])
                         print(self.ensemble_rank, Jhat)
                         # use the taped model to get the derivative
