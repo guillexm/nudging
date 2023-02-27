@@ -11,7 +11,7 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
 """
 nsteps = 5
 model = Camsholm(100, nsteps)
-
+MALA = True
 
 bfilter = jittertemp_filter(n_temp=4, n_jitt = 10, rho= 0.4)
 
@@ -29,6 +29,14 @@ for i in range(nensemble[bfilter.ensemble_rank]):
 
 def log_likelihood(dY):
     return np.dot(dY, dY)/0.05**2/2
+
+def log_likelihood_symbolic(y,Y):
+    for i in range(len(Y)):
+        if i == 0:
+            ll = (Constant(y[0])-Y[0])**2/0.05**2/2
+        else:
+            ll += (Constant(y[i])-Y[i])**2/0.05**2/2
+    return ll
     
 #Load data
 y_exact = np.load('y_true.npy')
@@ -39,6 +47,7 @@ y = np.load('y_obs.npy')
 for k in range(N_obs):
     #PETSc.Sys.Print("Step", k)
     #print(bfilter.theta_temper)
-    bfilter.assimilation_step(y[k,:], log_likelihood)
-
-
+    if MALA:
+        bfilter.assimilation_step(y[k,:], log_likelihood_symbolic)
+    else:
+        bfilter.assimilation_step(y[k,:], log_likelihood)
