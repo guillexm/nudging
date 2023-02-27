@@ -189,7 +189,7 @@ class bootstrap_filter(base_filter):
             self.model.randomize(self.ensemble[i])
             self.model.run(self.ensemble[i], self.ensemble[i])   
 
-            Y = self.model.obs(self.ensemble[i])
+            Y = self.model.obs()
             self.weight_arr.dlocal[i] = log_likelihood(y-Y)
         self.parallel_resample()
 
@@ -261,7 +261,8 @@ class jittertemp_filter(base_filter):
         return dtheta
 
         
-    def assimilation_step(self, y, log_likelihood,  ess_tol=0.8):
+    def assimilation_step(self, y, log_likelihood,
+                          log_likelihood_symbolic=None, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
         weights = np.zeros(N)
         new_weights = np.zeros(N)
@@ -275,7 +276,7 @@ class jittertemp_filter(base_filter):
             for i in range(N):
                 # put result of forward model into new_ensemble
                 self.model.run(self.ensemble[i], self.new_ensemble[i])
-                Y = self.model.obs(self.new_ensemble[i])
+                Y = self.model.obs()
                 self.weight_arr.dlocal[i] = log_likelihood(y-Y)
 
             # adaptive dtheta choice
@@ -293,9 +294,9 @@ class jittertemp_filter(base_filter):
 
                 # forward model step
                 for i in range(N):
-                    if MALA:
-                        if not model_taped:
-                            model_taped = True
+                    if self.MALA:
+                        if not self.model_taped:
+                            self.model_taped = True
                             pyadjoint.tape.continue_annotation()
                             self.model.run(self.ensemble[i],
                                            self.new_ensemble[i])
@@ -303,7 +304,7 @@ class jittertemp_filter(base_filter):
                             #set the controls
                             m = self.model.controls()
                             #requires log_likelihood to return symbolic
-                            self.MALA_J = self.log_likelihood(obs_list)
+                            self.MALA_J = self.log_likelihood_symbolic(y, obs_list)
                             Jhat = ReducedFunctional(self.MALA_J, m)
                             pyadjoint.tape.pause_annotation()
 
@@ -332,13 +333,13 @@ class jittertemp_filter(base_filter):
                                    self.new_ensemble[i])
 
                     # particle weights
-                    Y = self.model.obs(self.new_ensemble[i])
+                    Y = self.model.obs()
                     new_weights[i] = exp(-theta*log_likelihood(y-Y))
                     if l == 0:
                         weights[i] = new_weights[i]
                     else:
                         # Metropolis MCMC
-                        if MALA:
+                        if self.MALA:
                             p_accept = 1
                         else:
                             p_accept = min(1, new_weights[i]/weights[i])

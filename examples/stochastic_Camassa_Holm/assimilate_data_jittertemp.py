@@ -48,6 +48,6 @@ for k in range(N_obs):
     #PETSc.Sys.Print("Step", k)
     #print(bfilter.theta_temper)
     if MALA:
-        bfilter.assimilation_step(y[k,:], log_likelihood_symbolic)
+        bfilter.assimilation_step(y[k,:], log_likelihood, log_likelihood_symbolic)
     else:
         bfilter.assimilation_step(y[k,:], log_likelihood)

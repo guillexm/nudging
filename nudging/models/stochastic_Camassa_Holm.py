@@ -120,8 +120,8 @@ class Camsholm(base_model):
             controls_list.append(Control(self.X[i]))
             return controls_list
         
-    def obs_symbolic(self, X0):
-        m, u = split(X0[0])
+    def obs_symbolic(self):
+        m, u = self.w0
         x_obs = np.arange(0.0,40.0)
         obs_list = []
         for xi in x_obs:
