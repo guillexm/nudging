@@ -125,7 +125,7 @@ class Camsholm(base_model):
         x_obs = np.arange(0.0,40.0)
         obs_list = []
         for xi in x_obs:
-            obs_list.append(u*exp(-(self.x - Constant(xi))**2/2)*dx)
+            obs_list.append(u*exp(-(self.x - Constant(AdjFloat(xi)))**2/2)*dx)
         return obs_list
 
 
