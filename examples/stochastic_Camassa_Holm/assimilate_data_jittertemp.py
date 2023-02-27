@@ -15,7 +15,8 @@ nsteps = 5
 model = Camsholm(100, nsteps)
 MALA = True
 
-bfilter = jittertemp_filter(n_temp=4, n_jitt = 10, rho= 0.4, MALA=MALA)
+bfilter = jittertemp_filter(n_temp=4, n_jitt = 10, rho= 0.4,
+                            verbose=True, MALA=MALA)
 
 
 nensemble = [2,2,2,2,2,2,

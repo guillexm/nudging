@@ -244,9 +244,6 @@ class jittertemp_filter(base_filter):
                 ess_theta = 1/np.sum(theta_weight**2)
                 esstheta_list.append(ess_theta)
                 dtheta_list.append(dtheta)
-            print("dtheta_list", dtheta_list)
-            print("ttheta_list", ttheta_list)
-            print("ess_dtheta", ess_list)
             #print("ess_theta", esstheta_list)
             # abusing owned array to send dtheta
             # to all ensemble members
@@ -283,6 +280,8 @@ class jittertemp_filter(base_filter):
             dtheta = self.adaptive_dtheta(dtheta, theta,  ess_tol)
             theta += dtheta
             self.theta_temper.append(theta)
+            PETSc.Sys.Print("theta", theta, "dtheta", dtheta)
+
             #print("theta_list", self.theta_temper)
 
             # resampling BEFORE jittering
@@ -290,8 +289,8 @@ class jittertemp_filter(base_filter):
 
             for l in range(self.n_jitt): # Jittering loop
                 if self.verbose:
-                    print("Jitter, Temper step", l, k)
-
+                    PETSc.Sys.Print("Jitter, Temper step", l, k)
+                    
                 # forward model step
                 for i in range(N):
                     if self.MALA:
@@ -352,7 +351,7 @@ class jittertemp_filter(base_filter):
                             self.model.copy(self.proposal_ensemble[i],
                                             self.ensemble[i])
 
-        if lf.verbose:
+        if self.verbose:
             print("Advancing ensemble")
         self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
