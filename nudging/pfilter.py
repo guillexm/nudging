@@ -308,22 +308,21 @@ class jittertemp_filter(base_filter):
                             for j in range(len(obs_list)):
                                 Y.append(assemble(obs_list[j]))
                             self.MALA_J = log_likelihood(y,Y)
-                            Jhat = ReducedFunctional(self.MALA_J, self.m)
+                            self.Jhat = ReducedFunctional(self.MALA_J, self.m)
                             pyadjoint.tape.pause_annotation()
                         #pyadjoint.get_working_tape().visualise(open_in_browser=True)
                         # run the model and get the functional value with
                         # ensemble[i]
-                        Jhat(self.ensemble[i])
-                        print(self.ensemble_rank, Jhat)
+                        self.Jhat(self.ensemble[i])
                         # use the taped model to get the derivative
-                        g = Jhat.derivative()
+                        g = self.Jhat.derivative()
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
                         self.model.randomize(self.proposal_ensemble[i],
                                              Constant((2-self.rho)/(2+self.rho)),
                                              Constant(2*self.rho/(2+self.rho)),
-                                             Constant((8*self.rho)**0.5/(2+self.rho))*g)
+                                             gscale=Constant((8*self.rho)**0.5/(2+self.rho)),g=g)
                     else:
                         # proposal PCN
                         self.model.copy(self.ensemble[i],

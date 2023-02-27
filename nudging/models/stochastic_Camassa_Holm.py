@@ -135,7 +135,7 @@ class Camsholm(base_model):
         return particle 
 
 
-    def randomize(self, X, c1=0, c2=1, g=None):
+    def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
         for i in range(self.nsteps):
@@ -143,4 +143,4 @@ class Camsholm(base_model):
                 count += 1
                 X[count].assign(c1*X[count] + c2*rg.normal(self.R, 0., 1.0))
                 if g:
-                    X[count] += g[count]
+                    X[count] += gscale*g[count]

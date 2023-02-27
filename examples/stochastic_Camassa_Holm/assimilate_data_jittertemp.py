@@ -18,7 +18,8 @@ MALA = True
 bfilter = jittertemp_filter(n_temp=4, n_jitt = 10, rho= 0.4, MALA=MALA)
 
 
-nensemble = [10,10,10,10]
+nensemble = [2,2,2,2,2,2,
+             2,2,2,2,2,2]
 bfilter.setup(nensemble, model)
 
 x, = SpatialCoordinate(model.mesh) 
