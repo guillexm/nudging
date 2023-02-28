@@ -310,13 +310,9 @@ class jittertemp_filter(base_filter):
                         self.Jhat(self.ensemble[i]+[y])
                         # use the taped model to get the derivative
                         g = self.Jhat.derivative()
-<<<<<<< HEAD
                         print("rank "+str(self.ensemble_rank)+
                               " gmax/min "+str(g[1].dat.data[:].max())
                               +" "+str(g[1].dat.data[:].min()))
-=======
-                        #print(g[1].at(0.1))
->>>>>>> bfa454ba6ddbefb8556f6aae22410b809d23fb7d
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
