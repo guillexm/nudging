@@ -97,8 +97,11 @@ class Camsholm(base_model):
 
         # vertex only mesh for observations
         x_obs = np.arange(0.5,40.0)
-        self.VOM = VertexOnlyMesh(self.mesh, x_obs) 
-
+        x_obs_list = []
+        for i in x_obs:
+            x_obs_list.append([i])
+        self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
+        self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
     def run(self, X0, X1):
         for i in range(len(X0)):
@@ -123,7 +126,7 @@ class Camsholm(base_model):
         
     def obs(self):
         m, u = self.w0.split()
-        Y = Function(self.VOM)
+        Y = Function(self.VVOM)
         Y.interpolate(u)
         return Y
 
