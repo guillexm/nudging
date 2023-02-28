@@ -43,17 +43,7 @@ for i in range(nensemble[jtfilter.ensemble_rank]):
     u.interpolate(u0_exp)
 
 def log_likelihood(y, Y):
-    ll = 0.
-    for i in range(len(Y)):
-        ll += (AdjFloat(y[i])-Y[i])**2/0.05**2/2
-    return ll
-
-def log_likelihood_symbolic(y,Y):
-    for i in range(len(Y)):
-        if i == 0:
-            ll = (AdjFloat(y[0])-Y[0])**2/0.05**2/2
-        else:
-            ll += (AdjFloat(y[i])-Y[i])**2/0.05**2/2
+    ll = (y-Y)**2/0.05**2/2
     return ll
     
 #Load data
@@ -64,14 +54,14 @@ N_obs = y.shape[0]
 y_e = np.zeros((N_obs, sum(nensemble), y.shape[1]))
 y_e_mean = np.zeros((N_obs, sum(nensemble)))
 
+yVOM = Function(model.VVOM)
+
 # do assimiliation step
 y_e_lst = []
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
-    if MALA:
-        jtfilter.assimilation_step(y[k,:], log_likelihood, log_likelihood_symbolic)
-    else:
-        jtfilter.assimilation_step(y[k,:], log_likelihood)
+    yVOM.dat.data[:] = y[k, :]
+    jtfilter.assimilation_step(yVOM, log_likelihood)
 
     y_e_list_arr = []
     for m in range(y.shape[1]):
