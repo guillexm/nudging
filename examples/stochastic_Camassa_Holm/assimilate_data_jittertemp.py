@@ -69,7 +69,8 @@ for k in range(N_obs):
         y_e_shared_arr = SharedArray(partition=nensemble, 
                                       comm=jtfilter.subcommunicators.ensemble_comm)
         for i in range(nensemble[jtfilter.ensemble_rank]):
-            y_e_shared_arr.dlocal[i] = model.obs()[m]
+            model.w0.assign(jtfilter.ensemble[i][0])
+            y_e_shared_arr.dlocal[i] = model.obs().dat.data[m]
             y_e_shared_arr.synchronise()
         y_e_list_arr.append(y_e_shared_arr.data())
     y_e_lst.append(y_e_list_arr)

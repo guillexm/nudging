@@ -297,7 +297,10 @@ class jittertemp_filter(base_filter):
                             self.model.run(self.ensemble[i],
                                            self.new_ensemble[i])
                             #set the controls
-                            self.m = self.model.controls() + [Control(y)]
+                            if type(y == Function):
+                                self.m = self.model.controls() + [Control(y)]
+                            else:
+                                self.m = self.model.controls()
                             #requires log_likelihood to return symbolic
                             Y = self.model.obs()
                             self.MALA_J = assemble(log_likelihood(y,Y))
