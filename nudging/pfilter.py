@@ -4,8 +4,6 @@ from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from .resampling import *
 import numpy as np
-from scipy.special import logsumexp
-from firedrake.petsc import PETSc
 import pyadjoint
 from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
 from firedrake_adjoint import *
