@@ -313,13 +313,14 @@ class jittertemp_filter(base_filter):
                         self.Jhat(self.ensemble[i])
                         # use the taped model to get the derivative
                         g = self.Jhat.derivative()
+                        #print(g[1].at(0.1))
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
                         self.model.randomize(self.proposal_ensemble[i],
                                              Constant((2-self.rho)/(2+self.rho)),
-                                             Constant(2*self.rho/(2+self.rho)),
-                                             gscale=Constant(-(8*self.rho)**0.5/(2+self.rho)),g=g)
+                                             Constant((8*self.rho)**0.5/(2+self.rho)),
+                                             gscale=Constant(-2*self.rho/(2+self.rho)),g=g)
                     else:
                         # proposal PCN
                         self.model.copy(self.ensemble[i],
@@ -334,6 +335,7 @@ class jittertemp_filter(base_filter):
                     # particle weights
                     Y = self.model.obs()
                     new_weights[i] = exp(-theta*log_likelihood(y,Y))
+                    #accept reject of MALA and Jittering 
                     if l == 0:
                         weights[i] = new_weights[i]
                     else:
