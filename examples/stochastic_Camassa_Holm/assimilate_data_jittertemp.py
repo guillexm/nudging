@@ -43,7 +43,7 @@ for i in range(nensemble[jtfilter.ensemble_rank]):
     u.interpolate(u0_exp)
 
 def log_likelihood(y, Y):
-    ll = (y-Y)**2/0.05**2/2
+    ll = (y-Y)**2/0.05**2/2*dx
     return ll
     
 #Load data
