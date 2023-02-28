@@ -26,29 +26,13 @@ class base_model(object, metaclass=ABCMeta):
         """
         pass
 
+    @abstractmethod
     def obs(self):
         """
         Observation operator
         returns
 
         obs - a numpy array of the observations from current model state
-        """
-        obs_list = self.obs_symbolic()
-        Y = np.zeros((len(obs_list),))
-        for i in range(len(obs_list)):
-            Y[i] = fd.assemble(obs_list[i])
-        return Y
-
-    @abstractmethod
-    def obs_symbolic(self, X0):
-        """
-        Symbolic observation operator
-        
-        X0 - an ensemble state
-
-        return
-
-        obs_list - a list of observation expressions
         """
         pass
     
@@ -71,7 +55,8 @@ class base_model(object, metaclass=ABCMeta):
         dW_n is the new noise
         """
         pass
-    
+
+
     @cached_property
     def R(self):
         """

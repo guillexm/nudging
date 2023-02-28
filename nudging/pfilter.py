@@ -258,8 +258,7 @@ class jittertemp_filter(base_filter):
         return dtheta
 
         
-    def assimilation_step(self, y, log_likelihood,
-                          log_likelihood_symbolic=None, ess_tol=0.8):
+    def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
         weights = np.zeros(N)
         new_weights = np.zeros(N)
@@ -301,20 +300,21 @@ class jittertemp_filter(base_filter):
                                            self.new_ensemble[i])
                             obs_list = self.model.obs_symbolic()
                             #set the controls
-                            self.m = self.model.controls()
+                            self.m = self.model.controls() + [y]
                             #requires log_likelihood to return symbolic
-                            Y = []
-                            for j in range(len(obs_list)):
-                                Y.append(assemble(obs_list[j]))
+                            Y = self.model.obs()
                             self.MALA_J = log_likelihood(y,Y)
                             self.Jhat = ReducedFunctional(self.MALA_J, self.m)
                             pyadjoint.tape.pause_annotation()
                         #pyadjoint.get_working_tape().visualise(open_in_browser=True)
                         # run the model and get the functional value with
                         # ensemble[i]
-                        self.Jhat(self.ensemble[i])
+                        self.Jhat(self.ensemble[i]+[y])
                         # use the taped model to get the derivative
                         g = self.Jhat.derivative()
+                        print("rank "+str(self.ensemble_rank)+
+                              " gmax/min "+str(g[1].dat.data[:].max())
+                              +" "+str(g[1].dat.data[:].min()))
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])

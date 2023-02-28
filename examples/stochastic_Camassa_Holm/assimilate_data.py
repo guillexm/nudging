@@ -28,7 +28,8 @@ for i in range(nensemble[bfilter.ensemble_rank]):
     u.interpolate(u0_exp)
 
 def log_likelihood(dY):
-    return np.dot(dY, dY)/0.05**2/2
+    # dY is vertex only mesh data
+    return dY**2/0.05**2/2*dx
     
 #Load data
 y_exact = np.load('y_true.npy')
@@ -54,12 +55,13 @@ print("==================Rank================", bfilter.ensemble_rank)
 
 obs_lst = []
 
+yVOM = Function(model.VOM)
 
 for k in range(N_obs):
    
     #PETSc.Sys.Print("Step", k)
-    bfilter.assimilation_step(y[k,:], log_likelihood)
-    
+    yVOM.dat.data[:] = y[k, :]
+    bfilter.assimilation_step(yVOM, log_likelihood)
     
     obs_list_arr = []
     for m in range(y.shape[1]):
@@ -67,11 +69,10 @@ for k in range(N_obs):
         obs_arr = SharedArray(partition=nensemble, 
                                       comm=bfilter.subcommunicators.ensemble_comm)
         for i in range(nensemble[bfilter.ensemble_rank]):
-            obs_arr.dlocal[i] = model.obs(bfilter.ensemble[i])[m]
+            obs_arr.dlocal[i] = model.obs(bfilter.ensemble[i]).dat.data[m]
             obs_arr.synchronise()
         obs_list_arr.append(obs_arr.data())
     obs_lst.append(obs_list_arr)
-        
 
 
             

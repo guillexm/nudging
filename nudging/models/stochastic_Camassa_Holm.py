@@ -95,6 +95,11 @@ class Camsholm(base_model):
         # state for controls
         self.X = self.allocate()
 
+        # vertex only mesh for observations
+        x_obs = np.arange(0.5,40.0)
+        self.VOM = VertexOnlyMesh(self.mesh, x_obs) 
+
+
     def run(self, X0, X1):
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
@@ -116,14 +121,11 @@ class Camsholm(base_model):
             controls_list.append(Control(self.X[i]))
         return controls_list
         
-    def obs_symbolic(self):
-        m, u = self.w0
-        x_obs = np.arange(0.0,40.0)
-        obs_list = []
-        for xi in x_obs:
-            obs_list.append(u*exp(-(self.x - Constant(AdjFloat(xi)))**2/2)*dx)
-        return obs_list
-
+    def obs(self):
+        m, u = self.w0.split()
+        Y = Function(self.VOM)
+        Y.interpolate(u)
+        return Y
 
     def allocate(self):
         particle = [Function(self.W)]
