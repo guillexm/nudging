@@ -1,4 +1,5 @@
 from firedrake import *
+from firedrake_adjoint import *
 from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from nudging.model import *
@@ -90,32 +91,61 @@ class Camsholm(base_model):
         # Data save
         self.m0, self.u0 = self.w0.split()
         self.m1, self.u1 = self.w1.split()
-    
+
+        # state for controls
+        self.X = self.allocate()
+
+        # vertex only mesh for observations
+        x_obs = np.arange(0.5,40.0)
+        x_obs_list = []
+        for i in x_obs:
+            x_obs_list.append([i])
+        self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
+        self.VVOM = FunctionSpace(self.VOM, "DG", 0)
+
     def run(self, X0, X1):
-        self.w0.assign(X0)
+        for i in range(len(X0)):
+            self.X[i].assign(X0[i])
+        self.w0.assign(self.X[0])
         self.msolve.solve()
         for step in range(self.nsteps):
-            self.dW1.assign(self.dW[step][0])
-            self.dW2.assign(self.dW[step][1])
-            self.dW3.assign(self.dW[step][2])
-            self.dW4.assign(self.dW[step][3])
+            self.dW1.assign(self.X[4*step+1])
+            self.dW2.assign(self.X[4*step+2])
+            self.dW3.assign(self.X[4*step+3])
+            self.dW4.assign(self.X[4*step+4])
 
             self.usolver.solve()
             self.w0.assign(self.w1)
-        X1.assign(self.w0) # save sol at the nstep th time 
+        X1[0].assign(self.w0) # save sol at the nstep th time 
 
+    def controls(self):
+        controls_list = []
+        for i in range(len(self.X)):
+            controls_list.append(Control(self.X[i]))
+        return controls_list
+        
+    def obs(self):
+        m, u = self.w0.split()
+        Y = Function(self.VVOM)
+        Y.interpolate(u)
+        return Y
 
-    def obs(self, X0):
-        m, u = X0.split()
-        x_obs = np.arange(0.0,40.0)
-        return np.array(u.at(x_obs))
-
-
-    def allocate(self):        
-        return Function(self.W)
-
-    def randomize(self):
-        rg = self.rg
+    def allocate(self):
+        particle = [Function(self.W)]
         for i in range(self.nsteps):
             for j in range(4):
-                self.dW[i][j].assign(rg.normal(self.R, 0., 1.0))
+                dW = Function(self.R)
+                dW.assign(self.rg.normal(self.R, 0., 1.0))
+                particle.append(dW) 
+        return particle 
+
+
+    def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
+        rg = self.rg
+        count = 0
+        for i in range(self.nsteps):
+            for j in range(4):
+                count += 1
+                X[count].assign(c1*X[count] + c2*rg.normal(self.R, 0., 1.0))
+                if g:
+                    X[count] += gscale*g[count]

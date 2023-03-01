@@ -4,10 +4,10 @@ from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from .resampling import *
 import numpy as np
-from scipy.special import logsumexp
-from firedrake.petsc import PETSc
-
+import pyadjoint
 from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
+from firedrake_adjoint import *
+pyadjoint.tape.pause_annotation()
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
@@ -40,9 +40,11 @@ class base_filter(object, metaclass=ABCMeta):
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
         self.ensemble = []
         self.new_ensemble = []
+        self.proposal_ensemble = []
         for i in range(self.nensemble[self.ensemble_rank]):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
+            self.proposal_ensemble.append(model.allocate())
 
         # some numbers for shared array and owned array
         self.nlocal = self.nensemble[self.ensemble_rank]
@@ -63,7 +65,6 @@ class base_filter(object, metaclass=ABCMeta):
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
             self.offset_list.append(sum(self.nensemble[:i_rank]))
-       
         #a resampling method
         self.resampler = residual_resampling(seed=resampler_seed)
 
@@ -74,13 +75,13 @@ class base_filter(object, metaclass=ABCMeta):
                 break
         return rank
         
-    def parallel_resample(self):
+    def parallel_resample(self, dtheta=1):
         
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             weights = self.weight_arr.data()
             # renormalise
-            weights = np.exp(-weights)
+            weights = np.exp(-dtheta*weights)
             weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
 
@@ -105,30 +106,41 @@ class base_filter(object, metaclass=ABCMeta):
             for j in range(self.s_arr.size):
                 if s_copy[j] == iglobal:
                     targets.append(j)
-            print('Target', "rank", self.ensemble_rank,
-                  "ilocal", ilocal,
-                  "iglobal", iglobal,
-                  targets, flush=True)
 
             for target in targets:
-                request_send = self.subcommunicators.isend(
-                    self.ensemble[ilocal],
-                    dest=self.index2rank(target),
-                    tag=target)
-                mpi_requests.extend(request_send)
+                if type(self.ensemble[ilocal] == 'list'):
+                    for k in range(len(self.ensemble[ilocal])):
+                        request_send = self.subcommunicators.isend(
+                            self.ensemble[ilocal][k],
+                            dest=self.index2rank(target),
+                            tag=1000*target+k)
+                        mpi_requests.extend(request_send)
+                else:
+                    request_send = self.subcommunicators.isend(
+                        self.ensemble[ilocal],
+                        dest=self.index2rank(target),
+                        tag=target)
+                    mpi_requests.extend(request_send)
 
             source_rank = self.index2rank(s_copy[iglobal])
-            request_recv = self.subcommunicators.irecv(
-                self.new_ensemble[ilocal],
-                source=source_rank,
-                tag=iglobal)
-            mpi_requests.extend(request_recv)
+            if type(self.ensemble[ilocal] == 'list'):
+                for k in range(len(self.ensemble[ilocal])):
+                    request_recv = self.subcommunicators.irecv(
+                        self.new_ensemble[ilocal][k],
+                        source=source_rank,
+                        tag=1000*iglobal+k)
+                    mpi_requests.extend(request_recv)
+            else:
+                request_recv = self.subcommunicators.irecv(
+                    self.new_ensemble[ilocal],
+                    source=source_rank,
+                    tag=iglobal)
+                mpi_requests.extend(request_recv)
 
         MPI.Request.Waitall(mpi_requests)
         for i in range(self.nlocal):
-            print(i, self.subcommunicators.ensemble_comm.rank,
-                  self.subcommunicators.comm.rank)
-            self.ensemble[i].assign(self.new_ensemble[i])
+            for j in range(len(self.ensemble[i])):
+                self.ensemble[i][j].assign(self.new_ensemble[i][j])
 
 
 
@@ -155,108 +167,166 @@ class sim_filter(base_filter):
             self.ensemble[i].assign(self.offset_list[self.ensemble_rank]+i)
 
             Y = self.model.obs()
-            self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+            self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
-        
-       # forward model step
+        # forward model step
         for i in range(N):
-            self.model.randomize()
-            self.model.run(self.ensemble[i], self.ensemble[i])   # solving FEM with ensemble as input and final sol ensemble
+            self.model.randomize(self.ensemble[i])
+            self.model.run(self.ensemble[i], self.ensemble[i])   
 
-            Y = self.model.obs(self.ensemble[i])
-            self.weight_arr.dlocal[i] = log_likelihood(y-Y)
+            Y = self.model.obs()
+            self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
         self.parallel_resample()
 
 
-
 class jittertemp_filter(base_filter):
-    def __init__(self, nsteps, noise_shape, n_temp, n_jitt, rho,
-                 verbose=False):
-        self.nsteps = nsteps
-        self.noise_shape = noise_shape
+    def __init__(self, n_temp, n_jitt, rho,
+                 verbose=False, MALA=False):
         self.n_temp = n_temp
         self.n_jitt = n_jitt
         self.rho = rho
         self.verbose=verbose
+        self.MALA = MALA
+        self.model_taped = False
 
+    def setup(self, nensemble, model, resampler_seed=34343):
+        super(jittertemp_filter, self).setup(
+            nensemble, model, resampler_seed=34343)
+        # Owned array for sending dtheta
+        self.dtheta_arr = OwnedArray(size = self.nglobal, dtype=float,
+                                     comm=self.subcommunicators.ensemble_comm,
+                                     owner=0)
+
+    def adaptive_dtheta(self, dtheta, theta, ess_tol):
+        N = self.nensemble[self.ensemble_rank]
+        dtheta_list = []
+        ttheta_list = []
+        ess_list = []
+        esstheta_list = []
+        ttheta = 0
+        self.weight_arr.synchronise(root=0)
+        if self.ensemble_rank == 0:
+            logweights = self.weight_arr.data()
+            ess =0.
+            while ess < ess_tol*sum(self.nensemble):
+                # renormalise using dtheta
+                weights = np.exp(-dtheta*logweights)
+                weights /= np.sum(weights)
+                ess = 1/np.sum(weights**2)
+                if ess < ess_tol*sum(self.nensemble):
+                    dtheta = 0.5*dtheta
+
+            # abuse owned array to broadcast dtheta
+            for i in range(self.nglobal):
+                self.dtheta_arr[i]=dtheta
+
+        # broadcast dtheta to every rank
+        self.dtheta_arr.synchronise()
+        dtheta = self.dtheta_arr.data()[0]
+        theta += dtheta
+        return dtheta
+
+        
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
         weights = np.zeros(N)
-        weights[:] = 1/N
         new_weights = np.zeros(N)
         self.ess_temper = []
         self.theta_temper = []
-        W = np.random.randn(N, *(self.noise_shape))
-        Wnew = np.zeros(W.shape)
 
         theta = .0
         while theta <1.: #  Tempering loop
             dtheta = 1.0 - theta
             # forward model step
             for i in range(N):
+                # generate the initial noise variables
+                self.model.randomize(self.ensemble[i])
                 # put result of forward model into new_ensemble
-                self.model.run(self.nsteps, W[i, :],
-                               self.ensemble[i], self.new_ensemble[i])
-            ess = 0.
-            while ess < ess_tol*N:
-                for i in range(N):
-                    Y = self.model.obs(self.new_ensemble[i])
-                    weights[i] = exp(-dtheta*log_likelihood(y-Y))
-                weights /= np.sum(weights)
-                ess = 1/np.sum(weights**2)
-                if ess < ess_tol*N:
-                    dtheta = 0.5*dtheta
-            self.ess_temper.append(ess)
+                self.model.run(self.ensemble[i], self.new_ensemble[i])
+                Y = self.model.obs()
+                self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
+
+            # adaptive dtheta choice
+            dtheta = self.adaptive_dtheta(dtheta, theta,  ess_tol)
             theta += dtheta
             self.theta_temper.append(theta)
+            if self.verbose:
+                PETSc.Sys.Print("theta", theta, "dtheta", dtheta)
 
             # resampling BEFORE jittering
-            s = residual_resampling(weights, model=SimModel)
-            self.e_s = s
-            if self.verbose:
-                print("Updating ensembles")
-            for i in range(N):
-                self.new_ensemble[i].assign(self.ensemble[s[i]])
-                Wnew[i, :] = W[s[i], :]
-            for i in range(N):
-                self.ensemble[i].assign(self.new_ensemble[i])
-                W[i, :] = Wnew[i, :]
+            self.parallel_resample()
 
             for l in range(self.n_jitt): # Jittering loop
                 if self.verbose:
-                    print("Jitter, Temper step", l, k)
-                # proposal
-                Wnew = self.rho*W + (1-self.rho**2)**0.5*np.random.randn(N, *(self.noise_shape))
-
+                    PETSc.Sys.Print("Jitter, Temper step", l, k)
+                    
                 # forward model step
                 for i in range(N):
+                    if self.MALA:
+                        if not self.model_taped:
+                            self.model_taped = True
+                            pyadjoint.tape.continue_annotation()
+                            self.model.run(self.ensemble[i],
+                                           self.new_ensemble[i])
+                            #set the controls
+                            if type(y == Function):
+                                self.m = self.model.controls() + [Control(y)]
+                            else:
+                                self.m = self.model.controls()
+                            #requires log_likelihood to return symbolic
+                            Y = self.model.obs()
+                            self.MALA_J = assemble(log_likelihood(y,Y))
+                            self.Jhat = ReducedFunctional(self.MALA_J, self.m)
+                            pyadjoint.tape.pause_annotation()
+
+                        # run the model and get the functional value with
+                        # ensemble[i]
+                        self.Jhat(self.ensemble[i]+[y])
+                        # use the taped model to get the derivative
+                        g = self.Jhat.derivative()
+                        # proposal
+                        self.model.copy(self.ensemble[i],
+                                        self.proposal_ensemble[i])
+                        self.model.randomize(self.proposal_ensemble[i],
+                                             Constant((2-self.rho)/(2+self.rho)),
+                                             Constant((8*self.rho)**0.5/(2+self.rho)),
+                                             gscale=Constant(-2*self.rho/(2+self.rho)),g=g)
+                    else:
+                        # proposal PCN
+                        self.model.copy(self.ensemble[i],
+                                        self.proposal_ensemble[i])
+                        self.model.randomize(self.proposal_ensemble[i],
+                                             self.rho,
+                                             (1-self.rho**2)**0.5)
                     # put result of forward model into new_ensemble
-                    self.model.run(self.nsteps, Wnew[i, :],
-                                   self.ensemble[i], self.new_ensemble[i])
+                    self.model.run(self.proposal_ensemble[i],
+                                   self.new_ensemble[i])
 
                     # particle weights
-                    Y = self.model.obs(self.new_ensemble[i])
-                    new_weights[i] = exp(-theta*log_likelihood(y-Y))
+                    Y = self.model.obs()
+                    new_weights[i] = exp(-theta*assemble(log_likelihood(y,Y)))
+                    #accept reject of MALA and Jittering 
                     if l == 0:
                         weights[i] = new_weights[i]
                     else:
-                        #  Metropolis MCMC
-                        p_accept = min(1, new_weights[i]/weights[i])
-                        #accept or reject tool
-                        if np.random.rand() < p_accept:
+                        # Metropolis MCMC
+                        if self.MALA:
+                            p_accept = 1
+                        else:
+                            p_accept = min(1, new_weights[i]/weights[i])
+                        # accept or reject tool
+                        u = self.model.rg.uniform(self.model.R, 0., 1.0)
+                        if u.dat.data[:] < p_accept:
                             weights[i] = new_weights[i]
-                            W[i,:] = Wnew[i,:]
-
-                weights /= np.sum(weights)
-                self.e_weight = weights
+                            self.model.copy(self.proposal_ensemble[i],
+                                            self.ensemble[i])
 
         if self.verbose:
-            print("Advancing ensemble")
-        self.model.run(self.nsteps, W[i, :],
-                                   self.ensemble[i], self.ensemble[i])
+            PETSc.Sys.Print("Advancing ensemble")
+        self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
-            print("assimilation step complete")
+            PETSc.Sys.Print("assimilation step complete")

@@ -37,11 +37,11 @@ class residual_resampling(object):
             u = self.rg.uniform(self.R, 0., 1.0)
             u0 =  u.dat.data[:]
 
-        cs = np.cumsum(residual_weights)
-        istar = -1
-        while cs[istar+1] < u0:
-            istar += 1
-        copies[istar] += 1
+            cs = np.cumsum(residual_weights)
+            istar = -1
+            while cs[istar+1] < u0:
+                istar += 1
+            copies[istar] += 1
 
         count = 0
         s = np.zeros(N, dtype=int)
