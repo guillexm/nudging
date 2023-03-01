@@ -73,7 +73,7 @@ for k in range(N_obs):
 
     for m in range(y.shape[1]):
         y_e_list[m].synchronise()
-        if jtfilter.ensemble_rank == 0:
+        if COMM_WORLD.rank == 0:
             y_e[:, k, m] = y_e_list[m].data()
 
 if COMM_WORLD.rank == 0:
