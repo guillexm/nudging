@@ -56,7 +56,7 @@ for m in range(y.shape[1]):
     y_e_list.append(y_e_shared)
 
 ys = y.shape
-if jtfilter.ensemble_rank == 0:
+if COMM_WORLD.rank == 0:
     y_e = np.zeros((np.sum(nensemble), ys[0], ys[1]))
 
 # do assimiliation step
@@ -76,5 +76,5 @@ for k in range(N_obs):
         if jtfilter.ensemble_rank == 0:
             y_e[:, k, m] = y_e_list[m].data()
 
-if jtfilter.ensemble_rank == 0:
+if COMM_WORLD.rank == 0:
     np.save("ensemble_simulated_obs.npy", y_e)
