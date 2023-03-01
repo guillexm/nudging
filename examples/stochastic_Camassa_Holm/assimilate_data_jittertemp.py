@@ -25,17 +25,12 @@ jtfilter.setup(nensemble, model)
 
 x, = SpatialCoordinate(model.mesh) 
 
-#randomness of the initial data
-dx0 = Constant(0.)
-dx1 = Constant(0.)
-a = Constant(0.)
-b = Constant(0.)
-
+#prepare the initial ensemble
 for i in range(nensemble[jtfilter.ensemble_rank]):
-    dx0.assign(np.random.randn())
-    dx1.assign(np.random.randn())
-    a.assign(np.random.rand())
-    b.assign(np.random.rand())
+    dx0 = model.rg.normal(model.R, 0., 1.0)
+    dx1 = model.rg.normal(model.R, 0., 1.0)
+    a = model.rg.uniform(model.R, 0., 1.0)
+    b = model.rg.uniform(model.R, 0., 1.0)
     u0_exp = (1+a)*0.2*2/(exp(x-403./15. + dx0) + exp(-x+403./15. + dx1)) \
         + (1+b)*0.5*2/(exp(x-203./15. + dx0)+exp(-x+203./15. + dx1))
 
@@ -81,4 +76,5 @@ for k in range(N_obs):
         if jtfilter.ensemble_rank == 0:
             y_e[:, k, m] = y_e_list[m].data()
 
-np.save("ensemble_simulated_obs.npy", y_e)
+if jtfilter.ensemble_rank == 0:
+    np.save("ensemble_simulated_obs.npy", y_e)
