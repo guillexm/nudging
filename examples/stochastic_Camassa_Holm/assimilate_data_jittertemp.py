@@ -14,9 +14,9 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
 nsteps = 5
 model = Camsholm(100, nsteps)
 MALA = True
-
+verbose = True
 jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.4,
-                            verbose=False, MALA=MALA)
+                            verbose=verbose, MALA=MALA)
 
 
 nensemble = [5,5,

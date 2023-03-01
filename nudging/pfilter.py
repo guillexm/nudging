@@ -27,7 +27,6 @@ class base_filter(object, metaclass=ABCMeta):
         self.nensemble = nensemble
         n_ensemble_partitions = len(nensemble)
         self.nspace = int(COMM_WORLD.size/n_ensemble_partitions)
-        #print(self.nspace, n_ensemble_partitions, COMM_WORLD.size, 'bsdfdf')
         assert(self.nspace*n_ensemble_partitions == COMM_WORLD.size)
 
         self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
@@ -66,7 +65,6 @@ class base_filter(object, metaclass=ABCMeta):
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
             self.offset_list.append(sum(self.nensemble[:i_rank]))
-        #print(self.offset_list)
         #a resampling method
         self.resampler = residual_resampling(seed=resampler_seed)
 
@@ -97,8 +95,6 @@ class base_filter(object, metaclass=ABCMeta):
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
         self.s_copy = s_copy
-        #print('=========================================Rank====================================', self.ensemble_rank)
-        #print("S", s_copy)
 
         mpi_requests = []
         
@@ -110,10 +106,6 @@ class base_filter(object, metaclass=ABCMeta):
             for j in range(self.s_arr.size):
                 if s_copy[j] == iglobal:
                     targets.append(j)
-            # print('Target', "rank", self.ensemble_rank,
-            #       "ilocal", ilocal,
-            #       "iglobal", iglobal,
-            #       targets, flush=True)
 
             for target in targets:
                 if type(self.ensemble[ilocal] == 'list'):
@@ -147,7 +139,6 @@ class base_filter(object, metaclass=ABCMeta):
 
         MPI.Request.Waitall(mpi_requests)
         for i in range(self.nlocal):
-            #print(i, self.subcommunicators.ensemble_comm.rank, self.subcommunicators.comm.rank)
             for j in range(len(self.ensemble[i])):
                 self.ensemble[i][j].assign(self.new_ensemble[i][j])
 
@@ -217,34 +208,19 @@ class jittertemp_filter(base_filter):
         ess_list = []
         esstheta_list = []
         ttheta = 0
-        #M = sum(self.nensemble)
-        #print(M)
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             logweights = self.weight_arr.data()
             ess =0.
-            ess_theta = 0.
-            theta_weight = []
             while ess < ess_tol*sum(self.nensemble):
                 # renormalise using dtheta
                 weights = np.exp(-dtheta*logweights)
                 weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
-                ess_list.append(ess)
-            
-
                 if ess < ess_tol*sum(self.nensemble):
                     dtheta = 0.5*dtheta
-                ttheta += dtheta
-                ttheta_list.append(ttheta)
-                theta_weight = np.exp(-ttheta*logweights)
-                theta_weight /= np.sum(theta_weight)
-                ess_theta = 1/np.sum(theta_weight**2)
-                esstheta_list.append(ess_theta)
-                dtheta_list.append(dtheta)
-            #print("ess_theta", esstheta_list)
-            # abusing owned array to send dtheta
-            # to all ensemble members
+
+            # abuse owned array to broadcast dtheta
             for i in range(self.nglobal):
                 self.dtheta_arr[i]=dtheta
 
@@ -252,7 +228,6 @@ class jittertemp_filter(base_filter):
         self.dtheta_arr.synchronise()
         dtheta = self.dtheta_arr.data()[0]
         theta += dtheta
-        #print(theta)
         return dtheta
 
         
@@ -277,9 +252,8 @@ class jittertemp_filter(base_filter):
             dtheta = self.adaptive_dtheta(dtheta, theta,  ess_tol)
             theta += dtheta
             self.theta_temper.append(theta)
-            PETSc.Sys.Print("theta", theta, "dtheta", dtheta)
-
-            #print("theta_list", self.theta_temper)
+            if self.verbose:
+                PETSc.Sys.Print("theta", theta, "dtheta", dtheta)
 
             # resampling BEFORE jittering
             self.parallel_resample()
@@ -306,15 +280,12 @@ class jittertemp_filter(base_filter):
                             self.MALA_J = assemble(log_likelihood(y,Y))
                             self.Jhat = ReducedFunctional(self.MALA_J, self.m)
                             pyadjoint.tape.pause_annotation()
-                        #pyadjoint.get_working_tape().visualise(open_in_browser=True)
+
                         # run the model and get the functional value with
                         # ensemble[i]
                         self.Jhat(self.ensemble[i]+[y])
                         # use the taped model to get the derivative
                         g = self.Jhat.derivative()
-                        print("rank "+str(self.ensemble_rank)+
-                              " gmax/min "+str(g[1].dat.data[:].max())
-                              +" "+str(g[1].dat.data[:].min()))
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
@@ -353,7 +324,7 @@ class jittertemp_filter(base_filter):
                                             self.ensemble[i])
 
         if self.verbose:
-            print("Advancing ensemble")
+            PETSc.Sys.Print("Advancing ensemble")
         self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
-            print("assimilation step complete")
+            PETSc.Sys.Print("assimilation step complete")
