@@ -243,6 +243,8 @@ class jittertemp_filter(base_filter):
             dtheta = 1.0 - theta
             # forward model step
             for i in range(N):
+                # generate the initial noise variables
+                self.model.randomize(self.ensemble[i])
                 # put result of forward model into new_ensemble
                 self.model.run(self.ensemble[i], self.new_ensemble[i])
                 Y = self.model.obs()
