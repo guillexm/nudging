@@ -51,21 +51,18 @@ y_exact = np.load('y_true.npy')
 y = np.load('y_obs.npy') 
 N_obs = y.shape[0]
 
-y_e = np.zeros((N_obs, sum(nensemble), y.shape[1]))
-y_e_mean = np.zeros((N_obs, sum(nensemble)))
-
 yVOM = Function(model.VVOM)
 
 # prepare shared arrays for data
-y_e_list_arr = []
+y_e_list = []
 for m in range(y.shape[1]):        
-    y_e_shared_arr = SharedArray(partition=nensemble, 
+    y_e_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
-    y_e_list_arr.append(y_e_shared_arr)
+    y_e_list.append(y_e_shared)
 
 ys = y.shape
 if jtfilter.ensemble_rank == 0:
-    y_e = np.zeros(np.sum(nensemble), ys[0], ys[1])
+    y_e = np.zeros((np.sum(nensemble), ys[0], ys[1]))
 
 # do assimiliation step
 for k in range(N_obs):
@@ -77,11 +74,11 @@ for k in range(N_obs):
         model.w0.assign(jtfilter.ensemble[i][0])
         obsdata = model.obs().dat.data[:]
         for m in range(y.shape[1]):
-            y_e_list_arr[m].dlocal[i] = obsdata[m]
+            y_e_list[m].dlocal[i] = obsdata[m]
 
     for m in range(y.shape[1]):
-        y_e_shared_arr[m].synchronise()
+        y_e_list[m].synchronise()
         if jtfilter.ensemble_rank == 0:
-            y_e[:, k, m] = y_e_shared_arr[m].data())
+            y_e[:, k, m] = y_e_list[m].data()
 
 np.save("ensemble_simulated_obs.npy", y_e)
