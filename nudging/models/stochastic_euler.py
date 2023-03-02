@@ -5,7 +5,7 @@ from pyop2.mpi import MPI
 from nudging.model import *
 import numpy as np
 
-class euler(base_model):
+class Euler_SD(base_model):
     def __init__(self, n, nsteps, dt = 0.01, seed=12353):
 
         self.n = n
@@ -14,106 +14,116 @@ class euler(base_model):
         self.seed = seed
 
     def setup(self, comm = MPI.COMM_WORLD):
+
+        alpha = Constant(1.0)
+        beta = Constant(0.1)
+    
         self.mesh = UnitSquareMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
         self.x = SpatialCoordinate(self.mesh)
 
         #FE spaces
-        self.Vcg = FunctionSpace(self.mesh, "CG", 1)
-        self.Vdg = FunctionSpace(self.mesh, "CG", 1)
+        self.Vcg = FunctionSpace(self.mesh, "CG", 1) # Streamfunctions
+        self.Vdg = FunctionSpace(self.mesh, "DQ", 1) # potential velocity (PV)
+        self.Vu = FunctionSpace(self.mesh, "DQ", 0) # velocity
         self.q0 = Function(self.Vdg)
         self.q1 = Function(self.Vdg)
 
-        #streamfunction solver
-        p = TestFunction(self.Vcg)
-        psi = TrialFunction(self.Vcg)
+        # Define function to store the fields
+        self.dq1 = Function(self.Vdg)  # PV fields for different time steps
+        self.q1 = Function(self.Vdg)
+       
 
-        a = inner(grad(p), grad(psi))*dx
-        L = p*q1*dx
-
-        self.psi = Function(self.Vcg)
-        bcs = [DirichetBC(self.Vcg, 0., "on_boundary")]
-        psi_prob = LinearVariationalProblem(a, L, self.psi, bcs=bcs)
-        params = {"ksp_type":"preonly",
-                  "pc_type":"lu"}
-        self.psi_solver = LinearVariationalSolver(psi_prob,
-                                                  solver_parameters=params)
-
-        # noise variables
-        self.w1 = Function(self.W)
-        self.w1.assign(self.w0)
-        self.m1, self.u1 = split(self.w1)   # for n+1 the  time
-        self.m0, self.u0 = split(self.w0)   # for n th time 
+        # Define the weakfunction for stream 
+        self.psi0 = Function(self.Vcg) 
+        self.psi = TrialFunction(self.Vcg)  
+        self.phi = TestFunction(self.Vcg)
         
-        #Adding extra term included random number
-        self.fx1 = Function(self.V)
-        self.fx2 = Function(self.V)
-        self.fx3 = Function(self.V)
-        self.fx4 = Function(self.V)
 
-        self.fx1.interpolate(0.1*sin(pi*self.x/8.))
-        self.fx2.interpolate(0.1*sin(2.*pi*self.x/8.))
-        self.fx3.interpolate(0.1*sin(3.*pi*self.x/8.))
-        self.fx4.interpolate(0.1*sin(4.*pi*self.x/8.))
+        # Build the weak form for the inversion
+        self.Apsi = (inner(grad(self.psi), grad(self.phi)) +  self.psi * self.phi) * dx
+        self.Lpsi = -self.q1 * self.phi * dx
 
-        # with added term
-        self.R = FunctionSpace(self.mesh, "R", 0)
-        self.dW = []
-        for i in range(self.nsteps):
-            subdW = []
-            for j in range(4):
-                subdW.append(Function(self.R))
-            self.dW.append(subdW)
+        # We impose homogeneous dirichlet boundary conditions on the stream
+        # function at the top and bottom of the domain. ::
 
-        self.dW1 = Function(self.R)
-        self.dW2 = Function(self.R)
-        self.dW3 = Function(self.R)
-        self.dW4 = Function(self.R)
-        self.Ln = self.fx1*self.dW1+self.fx2*self.dW2+self.fx3*self.dW3+self.fx4*self.dW4
+        bc1 = DirichletBC(self.Vcg, 0.0, (1, 2))
+
+        self.psi_problem = LinearVariationalProblem(self.Apsi, self.Lpsi, self.psi0, bcs=bc1, constant_jacobian=True)
+        self.psi_solver = LinearVariationalSolver(self.psi_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
+
+        # setup the second equation
+        self.gradperp = lambda u: as_vector((-u.dx(1), u.dx(0)))
+        # upwinding terms
+        self.n_F = FacetNormal(self.mesh)
+        self.un = 0.5 * (dot(self.gradperp(self.psi0), self.n_F) + abs(dot(self.gradperp(self.psi0), self.n_F)))
         
-        # finite element linear functional 
-        Dt = Constant(self.dt)
-        self.mh = 0.5*(self.m1 + self.m0)
-        self.uh = 0.5*(self.u1 + self.u0)
-        self.v = self.uh*Dt+self.Ln*Dt**0.5
+        
+        ##############################################################################################
+        # For noise variable
+        self.dW = TrialFunction(self.Vcg)
+        self.dW_phi = TestFunction(self.Vcg)
+        # Fix the white noise
+        bcs_dw = DirichletBC(Vcg,  zero(), ("on_boundary",))
 
-        self.L = ((self.q*self.u1 + alphasq*self.q.dx(0)*self.u1.dx(0) - self.q*self.m1)*dx +(self.p*(self.m1-self.m0) + (self.p*self.v.dx(0)*self.mh -self.p.dx(0)*self.v*self.mh))*dx)
+        # Bilinear form
+        self.a_dW = inner(grad(self.dW), grad(self.dW_phi))*dx + self.dW*self.dW_phi*dx
+        self.L_dW = self.deta*self.dW_phi*dx
+        # Solve for noise 
+        self.dW_n = Function(self.Vcg)
+        #make a solver 
+        self.dW_problem = LinearVariationalProblem(self.a_dW, self.L_dW, self.dW_n, bcs=bcs_dw)
+        self.dW_solver = LinearVariationalSolver(self.dW_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
+        ################################################################################################
 
-        #def Linearfunc
+        #Bilinear form for PV 
+        self.q = TrialFunction(self.Vdg)
+        self.p = TestFunction(self.Vdg)
 
-        # solver
-
-        self.uprob = NonlinearVariationalProblem(self.L, self.w1)
-        self.usolver = NonlinearVariationalSolver(self.uprob, solver_parameters={'mat_type': 'aij', 'ksp_type': 'preonly','pc_type': 'lu'})
-
-        # Data save
-        self.m0, self.u0 = self.w0.split()
-        self.m1, self.u1 = self.w1.split()
+        a_mass = self.q*self.p  * dx
+        a_int = (dot(grad(self.p), -self.gradperp(self.psi0) * self.q) + beta * self.p * self.psi0.dx(0)) * dx
+        a_flux = (dot(jump(self.p), self.un("+") * self.q("+") - self.un("-") * self.q("-")))*dS
+        a_noise = self.dt*self.p*self.dW *dx 
+        arhs = a_mass - self.dt*(a_int+ a_flux + a_noise) 
+        #a_mass = a_mass + a_noise
+      
+        self.q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)
+        self.q_solver = LinearVariationalSolver(self.q_prob,
+                                   solver_parameters={"ksp_type": "preonly",
+                                                      "pc_type": "bjacobi",
+                                                      "sub_pc_type": "ilu"})
 
         # state for controls
         self.X = self.allocate()
 
-        # vertex only mesh for observations
-        x_obs = np.arange(0.5,40.0)
+        # need modification w.r.t 2D
+        # vertex only mesh for observations  
+        xy_point = np.linspace((0,0), (2.0*pi, 2.0*pi), self.n)
         x_obs_list = []
-        for i in x_obs:
-            x_obs_list.append([i])
+        for i in range(self.n):
+            x_obs_list.append(xy_point[i])
         self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
         self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
     def run(self, X0, X1):
-        for i in range(len(X0)):
-            self.X[i].assign(X0[i])
-        self.w0.assign(self.X[0])
-        self.msolve.solve()
         for step in range(self.nsteps):
-            self.dW1.assign(self.X[4*step+1])
-            self.dW2.assign(self.X[4*step+2])
-            self.dW3.assign(self.X[4*step+3])
-            self.dW4.assign(self.X[4*step+4])
+            # Compute the streamfunction for the known value of q0
+            self.q1.assign(X0)
+            self.psi_solver.solve()
+            self.q_solver.solve()
 
-            self.usolver.solve()
-            self.w0.assign(self.w1)
-        X1[0].assign(self.w0) # save sol at the nstep th time 
+            # Find intermediate solution q^(1)
+            self.q1.assign(self.dq1)
+            self.psi_solver.solve()
+            self.q_solver.solve()
+
+            # Find intermediate solution q^(2)
+            self.q1.assign(0.75 * self.q0 + 0.25 * self.dq1)
+            self.psi_solver.solve()
+            self.q_solver.solve()
+
+            # Find new solution q^(n+1)
+            self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
+        X1.assign(self.q0) # save sol at the nstep th time 
 
     def controls(self):
         controls_list = []
@@ -121,28 +131,28 @@ class euler(base_model):
             controls_list.append(Control(self.X[i]))
         return controls_list
         
+
+    #only for velocity
     def obs(self):
-        m, u = self.w0.split()
+        self.un = 0.5 * (dot(self.gradperp(self.psi0), self.n_F) + abs(dot(self.gradperp(self.psi0), self.n_F)))
         Y = Function(self.VVOM)
-        Y.interpolate(u)
+        Y.interpolate(self.un)
         return Y
 
+
     def allocate(self):
-        particle = [Function(self.W)]
-        for i in range(self.nsteps):
-            for j in range(4):
-                dW = Function(self.R)
-                dW.assign(self.rg.normal(self.R, 0., 1.0))
-                particle.append(dW) 
+        particle = [Function(self.Vu)]
+        for step in range(self.nsteps): # need to fix for every time varaiable 
+            particle.append(self.dW)
         return particle 
 
 
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
+        self.deta = Function(self.Vcg)
         for i in range(self.nsteps):
-            for j in range(4):
-                count += 1
-                X[count].assign(c1*X[count] + c2*rg.normal(self.R, 0., 1.0))
-                if g:
-                    X[count] += gscale*g[count]
+               self.deta.assign(self.rg.normal(self.Vcg, 0., 1.0))
+               self.dW_solver.solve()
+               self.dW.assign(self.dW_n)
+               
