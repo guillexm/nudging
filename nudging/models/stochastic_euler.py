@@ -17,16 +17,19 @@ class Euler_SD(base_model):
 
         alpha = Constant(1.0)
         beta = Constant(0.1)
-    
-        self.mesh = UnitSquareMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
+        self.Lx = 2.0*pi  # Zonal length
+        self.Ly = 2.0*pi  # Meridonal length
+        self.mesh = PeriodicRectangleMesh(self.n, self.n, self.Lx, self.Ly, direction="x", quadrilateral=True, comm = comm)
         self.x = SpatialCoordinate(self.mesh)
 
         #FE spaces
+        self.V = FunctionSpace(self.mesh, "CG", 1) #  noise term
         self.Vcg = FunctionSpace(self.mesh, "CG", 1) # Streamfunctions
         self.Vdg = FunctionSpace(self.mesh, "DQ", 1) # potential velocity (PV)
-        self.Vu = FunctionSpace(self.mesh, "DQ", 0) # velocity
         self.q0 = Function(self.Vdg)
         self.q1 = Function(self.Vdg)
+        self.Vu = FunctionSpace(self.mesh, "DQ", 0) # velocity
+        self.u0 = Function(self.Vu)
 
         # Define function to store the fields
         self.dq1 = Function(self.Vdg)  # PV fields for different time steps
@@ -43,9 +46,6 @@ class Euler_SD(base_model):
         self.Apsi = (inner(grad(self.psi), grad(self.phi)) +  self.psi * self.phi) * dx
         self.Lpsi = -self.q1 * self.phi * dx
 
-        # We impose homogeneous dirichlet boundary conditions on the stream
-        # function at the top and bottom of the domain. ::
-
         bc1 = DirichletBC(self.Vcg, 0.0, (1, 2))
 
         self.psi_problem = LinearVariationalProblem(self.Apsi, self.Lpsi, self.psi0, bcs=bc1, constant_jacobian=True)
@@ -60,29 +60,31 @@ class Euler_SD(base_model):
         
         ##############################################################################################
         # For noise variable
-        self.dW = TrialFunction(self.Vcg)
-        self.dW_phi = TestFunction(self.Vcg)
+        self.dW = TrialFunction(self.V)
+        self.dW_phi = TestFunction(self.V)
         # Fix the white noise
-        bcs_dw = DirichletBC(Vcg,  zero(), ("on_boundary",))
-
+        self.deta = Function(self.V)
+        self.deta.assign(self.rg.normal(self.V, 0., 1.0))
         # Bilinear form
+        bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary",))
         self.a_dW = inner(grad(self.dW), grad(self.dW_phi))*dx + self.dW*self.dW_phi*dx
         self.L_dW = self.deta*self.dW_phi*dx
         # Solve for noise 
-        self.dW_n = Function(self.Vcg)
+        self.dW_n = Function(self.V)
         #make a solver 
         self.dW_problem = LinearVariationalProblem(self.a_dW, self.L_dW, self.dW_n, bcs=bcs_dw)
         self.dW_solver = LinearVariationalSolver(self.dW_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
         ################################################################################################
 
         #Bilinear form for PV 
+        
         self.q = TrialFunction(self.Vdg)
         self.p = TestFunction(self.Vdg)
 
-        a_mass = self.q*self.p  * dx
+        a_mass = self.p * self.q * dx
         a_int = (dot(grad(self.p), -self.gradperp(self.psi0) * self.q) + beta * self.p * self.psi0.dx(0)) * dx
         a_flux = (dot(jump(self.p), self.un("+") * self.q("+") - self.un("-") * self.q("-")))*dS
-        a_noise = self.dt*self.p*self.dW *dx 
+        a_noise = self.p*self.dW *dx
         arhs = a_mass - self.dt*(a_int+ a_flux + a_noise) 
         #a_mass = a_mass + a_noise
       
@@ -93,7 +95,7 @@ class Euler_SD(base_model):
                                                       "sub_pc_type": "ilu"})
 
         # state for controls
-        self.X = self.allocate()
+        #self.X = self.allocate()
 
         # need modification w.r.t 2D
         # vertex only mesh for observations  
@@ -124,35 +126,41 @@ class Euler_SD(base_model):
             # Find new solution q^(n+1)
             self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
         X1.assign(self.q0) # save sol at the nstep th time 
+        return X1
 
-    def controls(self):
-        controls_list = []
-        for i in range(len(self.X)):
-            controls_list.append(Control(self.X[i]))
-        return controls_list
+    # def controls(self):
+    #     controls_list = []
+    #     for i in range(len(self.X)):
+    #         controls_list.append(Control(self.X[i]))
+    #     return controls_list
         
+    def controls(self):
+        return super().controls()
+    
 
     #only for velocity
     def obs(self):
-        self.un = 0.5 * (dot(self.gradperp(self.psi0), self.n_F) + abs(dot(self.gradperp(self.psi0), self.n_F)))
+        self.q1 = self.run(self.q0, self.q1)
+        self.psi_solver.solve()
+        self.u  = self.gradperp(self.psi0)
         Y = Function(self.VVOM)
-        Y.interpolate(self.un)
+        Y.interpolate(self.u)
         return Y
 
-
-    def allocate(self):
-        particle = [Function(self.Vu)]
-        for step in range(self.nsteps): # need to fix for every time varaiable 
-            particle.append(self.dW)
-        return particle 
-
+    def allocate(self):        
+        return Function(self.Vdg)
+    # def allocate(self):
+    #     particle = [Function(self.Vu)]
+    #     for step in range(self.nsteps): # need to fix for every time varaiable 
+    #         particle.append(self.dW)
+    #     return particle 
 
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
-        self.deta = Function(self.Vcg)
+        self.deta = Function(self.V)
         for i in range(self.nsteps):
-               self.deta.assign(self.rg.normal(self.Vcg, 0., 1.0))
+               self.deta.assign(self.rg.normal(self.V, 0., 1.0))
                self.dW_solver.solve()
                self.dW.assign(self.dW_n)
                
