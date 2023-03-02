@@ -9,16 +9,6 @@ from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
 from firedrake_adjoint import *
 pyadjoint.tape.pause_annotation()
 
-def renormalise(L):
-    """
-    input : L, array of negative log likelihoods
-    return w_i where
-    w_i = exp(-L_i)/sum(exp(-L))
-    """
-    Lmax = np.max(L)
-    logw = - (L-Lmax) - np.log(np.sum(np.exp(-(L-Lmax))))
-    return exp(logw)
-
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
     new_ensemble = []
@@ -89,9 +79,10 @@ class base_filter(object, metaclass=ABCMeta):
         
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
-            logweights = self.weight_arr.data()
-            # renormalise in log space
-            weights = renormalise(logweights)
+            weights = self.weight_arr.data()
+            # renormalise
+            weights = np.exp(-dtheta*weights)
+            weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
 
         # compute resampling protocol on rank 0
@@ -223,8 +214,8 @@ class jittertemp_filter(base_filter):
             ess =0.
             while ess < ess_tol*sum(self.nensemble):
                 # renormalise using dtheta
-                # use log formulae to avoid underflow
-                weights = renormalise(dtheta*logweights)
+                weights = np.exp(-dtheta*logweights)
+                weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
                 if ess < ess_tol*sum(self.nensemble):
                     dtheta = 0.5*dtheta
@@ -242,8 +233,8 @@ class jittertemp_filter(base_filter):
         
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
-        logweights = np.zeros(N)
-        new_logweights = np.zeros(N)
+        weights = np.zeros(N)
+        new_weights = np.zeros(N)
         self.ess_temper = []
         self.theta_temper = []
 
@@ -317,22 +308,20 @@ class jittertemp_filter(base_filter):
 
                     # particle weights
                     Y = self.model.obs()
-                    logweights = 
-                    new_logweights[i] = theta*assemble(log_likelihood(y,Y))
+                    new_weights[i] = exp(-theta*assemble(log_likelihood(y,Y)))
                     #accept reject of MALA and Jittering 
                     if l == 0:
-                        logweights[i] = new_logweights[i]
+                        weights[i] = new_weights[i]
                     else:
                         # Metropolis MCMC
                         if self.MALA:
-                            log_p_accept = 0
+                            p_accept = 1
                         else:
-                            log_p_accept = min(0, -new_logweights[i]
-                                               +log_weights[i])
+                            p_accept = min(1, new_weights[i]/weights[i])
                         # accept or reject tool
                         u = self.model.rg.uniform(self.model.R, 0., 1.0)
-                        if log(u.dat.data[:]) < log_p_accept:
-                            logweights[i] = new_logweights[i]
+                        if u.dat.data[:] < p_accept:
+                            weights[i] = new_weights[i]
                             self.model.copy(self.proposal_ensemble[i],
                                             self.ensemble[i])
 

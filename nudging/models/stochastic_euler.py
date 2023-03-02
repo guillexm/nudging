@@ -84,8 +84,8 @@ class Euler_SD(base_model):
         a_mass = self.p * self.q * dx
         a_int = (dot(grad(self.p), -self.gradperp(self.psi0) * self.q) + beta * self.p * self.psi0.dx(0)) * dx
         a_flux = (dot(jump(self.p), self.un("+") * self.q("+") - self.un("-") * self.q("-")))*dS
-        a_noise = self.p*self.dW *dx
-        arhs = a_mass - self.dt*(a_int+ a_flux + a_noise) 
+        #a_noise = self.p*self.dW *dx
+        arhs = a_mass - self.dt*(a_int+ a_flux) 
         #a_mass = a_mass + a_noise
       
         self.q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)

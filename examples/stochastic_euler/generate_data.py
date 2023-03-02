@@ -1,7 +1,7 @@
 from ctypes import sizeof
 from fileinput import filename
 from firedrake import *
-from nudging import *
+#from nudging import *
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -27,4 +27,4 @@ q0.interpolate(0.1*sin(x[0])*sin(x[1]))
 dt = 0.1
 
 # Exact numerical approximation 
-u = model.obs(X_truth)
+u = model.obs()
