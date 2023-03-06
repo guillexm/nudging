@@ -84,8 +84,8 @@ class Euler_SD(base_model):
         a_mass = self.p * self.q * dx
         a_int = (dot(grad(self.p), -self.gradperp(self.psi0) * self.q) + beta * self.p * self.psi0.dx(0)) * dx
         a_flux = (dot(jump(self.p), self.un("+") * self.q("+") - self.un("-") * self.q("-")))*dS
-        #a_noise = self.p*self.dW *dx
-        arhs = a_mass - self.dt*(a_int+ a_flux) 
+        a_noise = self.p*self.dW_n *dx
+        arhs = a_mass - self.dt*(a_int+ a_flux+a_noise) 
         #a_mass = a_mass + a_noise
       
         self.q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)
@@ -99,12 +99,12 @@ class Euler_SD(base_model):
 
         # need modification w.r.t 2D
         # vertex only mesh for observations  
-        xy_point = np.linspace((0,0), (2.0*pi, 2.0*pi), self.n)
-        x_obs_list = []
-        for i in range(self.n):
-            x_obs_list.append(xy_point[i])
+        x_point = np.linspace(0.0, 2.0*pi, self.n+1 )
+        y_point = np.linspace(0.0, 2.0*pi, self.n+1 )
+        xv, yv  = np.meshgrid(x_point, y_point)
+        x_obs_list = np.vstack([xv.ravel(), yv.ravel()]).T.tolist()
         self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
-        self.VVOM = FunctionSpace(self.VOM, "DG", 0)
+        self.VVOM = VectorFunctionSpace(self.VOM, "DG", 0)
 
     def run(self, X0, X1):
         for step in range(self.nsteps):
@@ -139,10 +139,12 @@ class Euler_SD(base_model):
     
 
     #only for velocity
+    #fix vom type
     def obs(self):
-        self.q1 = self.run(self.q0, self.q1)
+        self.run(self.q0, self.q1)
         self.psi_solver.solve()
         self.u  = self.gradperp(self.psi0)
+        #print(self.u)
         Y = Function(self.VVOM)
         Y.interpolate(self.u)
         return Y
@@ -155,12 +157,14 @@ class Euler_SD(base_model):
     #         particle.append(self.dW)
     #     return particle 
 
-    def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
+    # fix randomize
+    def randomize(self, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
         self.deta = Function(self.V)
         for i in range(self.nsteps):
+               #self.dW = Function(self.V)
                self.deta.assign(self.rg.normal(self.V, 0., 1.0))
                self.dW_solver.solve()
-               self.dW.assign(self.dW_n)
+               #self.dW.assign(self.dW_n)
                
