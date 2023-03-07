@@ -20,7 +20,7 @@ n = 8
 model = Euler_SD(n, 10)
 model.setup()
 X_truth = model.allocate()
-q0 = X_truth
+q0 = X_truth[0]
 x = SpatialCoordinate(model.mesh)
 q0.interpolate(0.1*sin(x[0])*sin(x[1]))
 

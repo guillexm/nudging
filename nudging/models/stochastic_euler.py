@@ -95,7 +95,7 @@ class Euler_SD(base_model):
                                                       "sub_pc_type": "ilu"})
 
         # state for controls
-        #self.X = self.allocate()
+        self.X = self.allocate()
 
         # need modification w.r.t 2D
         # vertex only mesh for observations  
@@ -107,9 +107,11 @@ class Euler_SD(base_model):
         self.VVOM = VectorFunctionSpace(self.VOM, "DG", 0)
 
     def run(self, X0, X1):
+        for i in range(len(X0)):
+            self.X[i].assign(X0[i])
         for step in range(self.nsteps):
             # Compute the streamfunction for the known value of q0
-            self.q1.assign(X0)
+            self.q1.assign(self.X[0])
             self.psi_solver.solve()
             self.q_solver.solve()
 
@@ -125,7 +127,7 @@ class Euler_SD(base_model):
 
             # Find new solution q^(n+1)
             self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
-        X1.assign(self.q0) # save sol at the nstep th time 
+        X1[0].assign(self.q0) # save sol at the nstep th time 
         return X1
 
     # def controls(self):
@@ -141,7 +143,8 @@ class Euler_SD(base_model):
     #only for velocity
     #fix vom type
     def obs(self):
-        self.run(self.q0, self.q1)
+        self.run(self.X, self.X)
+        self.q1 = self.X[0]
         self.psi_solver.solve()
         self.u  = self.gradperp(self.psi0)
         #print(self.u)
@@ -149,13 +152,25 @@ class Euler_SD(base_model):
         Y.interpolate(self.u)
         return Y
 
-    def allocate(self):        
-        return Function(self.Vdg)
+    # memory allocation for PV
+    # def allocate(self):        
+    #     return Function(self.Vdg)
     # def allocate(self):
     #     particle = [Function(self.Vu)]
     #     for step in range(self.nsteps): # need to fix for every time varaiable 
     #         particle.append(self.dW)
     #     return particle 
+
+    # memory allocation for PV
+    def allocate(self):
+        particle = [Function(self.Vdg)]
+        for i in range(self.nsteps):
+            self.deta.assign(self.rg.normal(self.V, 0., 1.0))
+            self.dW_solver.solve()
+            particle.append(self.dW_n) 
+        return particle 
+
+
 
     # fix randomize
     def randomize(self, c1=0, c2=1, gscale=None, g=None):
