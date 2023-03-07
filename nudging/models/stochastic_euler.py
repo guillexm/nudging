@@ -141,25 +141,16 @@ class Euler_SD(base_model):
     
 
     #only for velocity
-    #fix vom type
     def obs(self):
         self.run(self.X, self.X)
         self.q1 = self.X[0]
         self.psi_solver.solve()
         self.u  = self.gradperp(self.psi0)
-        #print(self.u)
+        print(self.u)
         Y = Function(self.VVOM)
         Y.interpolate(self.u)
         return Y
 
-    # memory allocation for PV
-    # def allocate(self):        
-    #     return Function(self.Vdg)
-    # def allocate(self):
-    #     particle = [Function(self.Vu)]
-    #     for step in range(self.nsteps): # need to fix for every time varaiable 
-    #         particle.append(self.dW)
-    #     return particle 
 
     # memory allocation for PV
     def allocate(self):
@@ -173,13 +164,15 @@ class Euler_SD(base_model):
 
 
     # fix randomize
-    def randomize(self, c1=0, c2=1, gscale=None, g=None):
+    def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
         self.deta = Function(self.V)
         for i in range(self.nsteps):
-               #self.dW = Function(self.V)
+               self.dW_star = Function(self.V)
                self.deta.assign(self.rg.normal(self.V, 0., 1.0))
                self.dW_solver.solve()
-               #self.dW.assign(self.dW_n)
+               self.dW_star.assign(self.dW_n)
+               count += 1
+               X[count].assign(c1*X[count] + c2*self.dW_star)
                
