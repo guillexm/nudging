@@ -9,7 +9,7 @@ from nudging.models.stochastic_euler import Euler_SD
 """ read obs from saved file 
     Do assimilation step for tempering and jittering steps 
 """
-n=16
+n=4
 nsteps = 10
 model = Euler_SD(n, 10)
 
@@ -21,7 +21,7 @@ nensemble = [2,2]
 bfilter.setup(nensemble, model)
 
 x = SpatialCoordinate(model.mesh) 
-q0_exct = 0.1*(1+0.1)*sin(x[0])*sin(x[1])
+q0_in = 0.1*(1+0.1)*sin(x[0])*sin(x[1])
 
 # for i in range(nensemble[bfilter.ensemble_rank]):
 #     q = bfilter.ensemble[i][0]
@@ -31,17 +31,15 @@ q0_exct = 0.1*(1+0.1)*sin(x[0])*sin(x[1])
 #     u_vel_en = model.obs()
 
 q = bfilter.ensemble[0][0]
-q.interpolate(q0_exct)
+q.interpolate(q0_in)
 model.randomize(bfilter.ensemble[0])
 model.run(bfilter.ensemble[0],bfilter.ensemble[0])
 v_vel_en = model.obs()
-print(type(v_vel_en))
 v_vel = v_vel_en.dat.data[:]
-print(type(v_vel))
-v_vel_data = np.save("v_vel.npy", v_vel)
+# v_vel_data = np.save("v_vel.npy", v_vel)
 
-v_vel_fin = np.load('v_vel.npy') 
-print('Vel_shape', np.shape(v_vel))
+# v_vel_fin = np.load('v_vel.npy') 
+# print('Vel_shape', np.shape(v_vel))
 
 
 
@@ -51,22 +49,22 @@ print('Vel_shape', np.shape(v_vel))
     
 # #Load data
 u_exact = np.load('u_true.npy')
-u_vel = np.load('u_obs_true.npy') 
+#u_vel = np.load('u_obs_true.npy') 
 
-N_obs = u_vel.shape[0]
+N_obs = u_exact.shape[0]
 
 uVOM = Function(model.VVOM)
-uVOM.dat.data[:] = u_vel[1, :]
+uVOM.dat.data[:] = u_exact[1, :]
 uVOM_data = uVOM.dat.data[:] 
 
 
 def log_likelihood(y, Y):
-    print(0.5*(1/0.05**2)*np.sum((v_vel[0]-uVOM_data[0])**2))
+    print('Diff in first component', 0.5*(1/0.05**2)*np.sum((v_vel[0]-uVOM_data[0])**2))
     #ll = (1/0.05**2)*(inner(y[0]-Y[0], y[0]-Y[0])*dx)
     ll = 0.5*(1/0.05**2)*((y[0]-Y[0])**2)*dx
     return ll
 
-print('Log', assemble(log_likelihood(uVOM, v_vel_en)))
+print('Loglikelihood in first component', assemble(log_likelihood(uVOM, v_vel_en)))
 
 # if bfilter.ensemble_rank == 0:
 #     plt.plot(u_exact, label = 'original')

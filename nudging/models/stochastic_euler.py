@@ -146,7 +146,7 @@ class Euler_SD(base_model):
         self.q1 = self.X[0]
         self.psi_solver.solve()
         self.u  = self.gradperp(self.psi0)
-        print(self.u)
+        #print(self.u)
         Y = Function(self.VVOM)
         Y.interpolate(self.u)
         return Y
@@ -156,9 +156,8 @@ class Euler_SD(base_model):
     def allocate(self):
         particle = [Function(self.Vdg)]
         for i in range(self.nsteps):
-            self.deta.assign(self.rg.normal(self.V, 0., 1.0))
-            self.dW_solver.solve()
-            particle.append(self.dW_n) 
+            dW_star = Function(self.V)
+            particle.append(dW_star) 
         return particle 
 
 
@@ -169,10 +168,8 @@ class Euler_SD(base_model):
         count = 0
         self.deta = Function(self.V)
         for i in range(self.nsteps):
-               self.dW_star = Function(self.V)
                self.deta.assign(self.rg.normal(self.V, 0., 1.0))
                self.dW_solver.solve()
-               self.dW_star.assign(self.dW_n)
                count += 1
-               X[count].assign(c1*X[count] + c2*self.dW_star)
+               X[count].assign(c1*X[count] + c2*self.dW_n)
                

@@ -15,7 +15,7 @@ run model, get true value and obseravation and use paraview for viewing
 add observation noise N(0, sigma^2) 
 """
 #np.random.seed(138)
-n = 16
+n = 4
 
 model = Euler_SD(n, 10)
 model.setup()
@@ -28,7 +28,7 @@ q0.interpolate(0.1*sin(x[0])*sin(x[1]))
 dt = 0.1
 
 
-model.randomize(X_truth) # solving noise term 
+model.randomize(X_truth) # poppulating noise term with PV 
 model.run(X_truth, X_truth) # use noise term to solve for PV
 u_true_VOM = model.obs() # use PV to get streamfunction and finally velocity
 u_true = u_true_VOM.dat.data[:]
@@ -70,7 +70,7 @@ print(np.shape(u_vel))
 # Plotting data
 plt.plot(u_exact_obs, 'r-', label = 'exact')
 for i in range(N_obs):
-    plt.plot(u_all_obs[i,:,:], ':', label = 'obs_data')
+    plt.plot(u_all_obs[i,:,:], ':')
 #plt.plot(u_exact_obs)
 plt.legend()
 plt.show()
