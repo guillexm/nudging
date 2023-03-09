@@ -146,11 +146,10 @@ class Euler_SD(base_model):
         self.q1 = self.X[0]
         self.psi_solver.solve()
         self.u  = self.gradperp(self.psi0)
-        print(self.u[0])
         Y_1 = Function(self.VVOM)
         Y_2 = Function(self.VVOM)
         Y_1.interpolate(self.u[0])
-        Y_2.interpolate(self.u[0])
+        Y_2.interpolate(self.u[1])
         return Y_1, Y_2
 
 

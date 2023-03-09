@@ -1,7 +1,6 @@
 from ctypes import sizeof
 from fileinput import filename
 from firedrake import *
-#from nudging import *
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -30,47 +29,55 @@ dt = 0.1
 
 model.randomize(X_truth) # poppulating noise term with PV 
 model.run(X_truth, X_truth) # use noise term to solve for PV
-u_true_VOM = model.obs() # use PV to get streamfunction and finally velocity
-u_true = u_true_VOM.dat.data[:]
-u_true_data = np.save("u_true.npy", u_true)
-
-print(np.shape(u_true))
+u_true_VOM_1 = model.obs()[0] # use PV to get streamfunction and velocity comp1 
+u_true_VOM_2 = model.obs()[1] # use PV to get streamfunction and velocity comp2 
+u_true_1 = u_true_VOM_1.dat.data[:]
+u_true_2 = u_true_VOM_2.dat.data[:]
+u_true_data_1 = np.save("u_true_1.npy", u_true_1)
+u_true_data_2 = np.save("u_true_2.npy", u_true_2)
 
 N_obs = 5
 
 #print(np.shape(u_obs_list))
 
 # Exact numerical approximation 
-u_fin_obs_list = []
+u_fin_obs_list_1 = []
+u_fin_obs_list_2 = []
 for i in range(N_obs):
-    u_obs_list =[]
+    u_obs_list_1 =[]
+    u_obs_list_2 =[]
     model.run(X_truth, X_truth)
-    u_true_VOM = model.obs()
-    u_true = u_true_VOM.dat.data[:]
-    u_noise = np.random.normal(0.0, 0.05, (n+1)**2 ) 
-    u_noisearray = np.transpose(np.array([u_noise, u_noise]), (1,0))
-    u_obs_list= u_true + u_noisearray
-    u_fin_obs_list.append(u_obs_list)
+    u_VOM_1 = model.obs()[0]
+    u_VOM_2 = model.obs()[1]
+    u_1 = u_VOM_1.dat.data[:]
+    u_2 = u_VOM_2.dat.data[:]
+    u_1_noise = np.random.normal(0.0, 0.05, (n+1)**2 ) 
+    u_2_noise = np.random.normal(0.0, 0.05, (n+1)**2 ) 
+    #u_noisearray = np.transpose(np.array([u_noise, u_noise]), (1,0))
+    u_obs_list_1= u_1 + u_1_noise
+    u_obs_list_2= u_2 + u_2_noise
+    u_fin_obs_list_1.append(u_obs_list_1)
+    u_fin_obs_list_2.append(u_obs_list_2)
 
 # Storing data     
 
-u_fin_obs_arr = np.array(u_fin_obs_list)
+u_fin_obs_arr_1 = np.array(u_fin_obs_list_1)
+u_fin_obs_arr_2 = np.array(u_fin_obs_list_2)
+u_fin_true_data_1 = np.save("u_obs_true_1.npy", u_fin_obs_arr_1)
+u_fin_true_data_2 = np.save("u_obs_true_2.npy", u_fin_obs_arr_2)
 
-print(np.shape(u_fin_obs_arr))
+u_exact_1 = np.load('u_true_1.npy')
+u_exact_2 = np.load('u_true_2.npy')
 
-u_fin_true_data = np.save("u_obs_true.npy", u_fin_obs_arr)
-
-u_exact_obs = np.load('u_true.npy')
-
-u_all_obs = np.load('u_obs_true.npy')
-
-u_vel = np.load('u_obs_true.npy')
-print(np.shape(u_vel))
+u_all_obs_1 = np.load('u_obs_true_1.npy')
+u_all_obs_2 = np.load('u_obs_true_2.npy')
 
 # Plotting data
-plt.plot(u_exact_obs, 'r-', label = 'exact')
+plt.plot(u_exact_1, 'r-', label = 'exact_1')
+plt.plot(u_exact_2, 'b-', label = 'exact_2')
 for i in range(N_obs):
-    plt.plot(u_all_obs[i,:,:], ':')
+    plt.plot(u_all_obs_1[i,:], '-.',label = 'obs_data_1')
+    plt.plot(u_all_obs_2[i,:], '--',label = 'obs_data_2')
 #plt.plot(u_exact_obs)
 plt.legend()
 plt.show()
