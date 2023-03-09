@@ -104,7 +104,7 @@ class Euler_SD(base_model):
         xv, yv  = np.meshgrid(x_point, y_point)
         x_obs_list = np.vstack([xv.ravel(), yv.ravel()]).T.tolist()
         self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
-        self.VVOM = VectorFunctionSpace(self.VOM, "DG", 0)
+        self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
     def run(self, X0, X1):
         for i in range(len(X0)):
@@ -146,10 +146,12 @@ class Euler_SD(base_model):
         self.q1 = self.X[0]
         self.psi_solver.solve()
         self.u  = self.gradperp(self.psi0)
-        #print(self.u)
-        Y = Function(self.VVOM)
-        Y.interpolate(self.u)
-        return Y
+        print(self.u[0])
+        Y_1 = Function(self.VVOM)
+        Y_2 = Function(self.VVOM)
+        Y_1.interpolate(self.u[0])
+        Y_2.interpolate(self.u[0])
+        return Y_1, Y_2
 
 
     # memory allocation for PV
