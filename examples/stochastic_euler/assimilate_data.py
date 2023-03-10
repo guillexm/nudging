@@ -17,14 +17,16 @@ model = Euler_SD(n, 10)
 bfilter = bootstrap_filter()
 
 
-nensemble = [2,2]
+nensemble = [2,2,2,2,2]
 bfilter.setup(nensemble, model)
 
 x = SpatialCoordinate(model.mesh) 
-q0_in = 0.1*(1+0.1)*sin(x[0])*sin(x[1])
+
 
 
 for i in range(nensemble[bfilter.ensemble_rank]):
+    a = model.rg.uniform(model.R, 0., 1.0)
+    q0_in = 0.1*(1+a)*sin(x[0])*sin(x[1])
     q = bfilter.ensemble[i][0]
     q.interpolate(q0_in)
 
