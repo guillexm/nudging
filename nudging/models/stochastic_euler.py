@@ -130,16 +130,12 @@ class Euler_SD(base_model):
         X1[0].assign(self.q0) # save sol at the nstep th time 
         return X1
 
-    # def controls(self):
-    #     controls_list = []
-    #     for i in range(len(self.X)):
-    #         controls_list.append(Control(self.X[i]))
-    #     return controls_list
-        
     def controls(self):
-        return super().controls()
-    
-
+        controls_list = []
+        for i in range(len(self.X)):
+            controls_list.append(Control(self.X[i]))
+        return controls_list
+        
     #only for velocity
     def obs(self):
         self.run(self.X, self.X)
@@ -173,4 +169,6 @@ class Euler_SD(base_model):
                self.dW_solver.solve()
                count += 1
                X[count].assign(c1*X[count] + c2*self.dW_n)
+               if g:
+                    X[count] += gscale*g[count]
                
