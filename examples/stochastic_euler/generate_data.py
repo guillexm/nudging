@@ -15,8 +15,8 @@ add observation noise N(0, sigma^2)
 """
 #np.random.seed(138)
 n = 4
-
-model = Euler_SD(n, 10)
+nsteps = 10
+model = Euler_SD(n, nsteps=nsteps)
 model.setup()
 X_truth = model.allocate()
 q0 = X_truth[0]
@@ -24,60 +24,39 @@ x = SpatialCoordinate(model.mesh)
 q0.interpolate(0.1*sin(x[0])*sin(x[1]))
 
 
-dt = 0.1
 
+N_obs = 15
 
 model.randomize(X_truth) # poppulating noise term with PV 
 model.run(X_truth, X_truth) # use noise term to solve for PV
 u_true_VOM_1 = model.obs()[0] # use PV to get streamfunction and velocity comp1 
 u_true_VOM_2 = model.obs()[1] # use PV to get streamfunction and velocity comp2 
-u_true_1 = u_true_VOM_1.dat.data[:]
-u_true_2 = u_true_VOM_2.dat.data[:]
-u_true_data_1 = np.save("u_true_1.npy", u_true_1)
-u_true_data_2 = np.save("u_true_2.npy", u_true_2)
+u1_true = u_true_VOM_1.dat.data[:]
+u2_true = u_true_VOM_2.dat.data[:]
 
-N_obs = 5
+u1_true_all = np.zeros((N_obs, np.size(u1_true)))
+u2_true_all = np.zeros((N_obs, np.size(u2_true)))
+u1_obs_all = np.zeros((N_obs, np.size(u1_true)))
+u2_obs_all = np.zeros((N_obs, np.size(u2_true)))
 
-#print(np.shape(u_obs_list))
 
 # Exact numerical approximation 
-u_fin_obs_list_1 = []
-u_fin_obs_list_2 = []
 for i in range(N_obs):
-    u_obs_list_1 =[]
-    u_obs_list_2 =[]
+    model.randomize(X_truth)
     model.run(X_truth, X_truth)
     u_VOM_1 = model.obs()[0]
     u_VOM_2 = model.obs()[1]
     u_1 = u_VOM_1.dat.data[:]
     u_2 = u_VOM_2.dat.data[:]
-    u_1_noise = np.random.normal(0.0, 0.05, (n+1)**2 ) 
-    u_2_noise = np.random.normal(0.0, 0.05, (n+1)**2 ) 
-    #u_noisearray = np.transpose(np.array([u_noise, u_noise]), (1,0))
-    u_obs_list_1= u_1 + u_1_noise
-    u_obs_list_2= u_2 + u_2_noise
-    u_fin_obs_list_1.append(u_obs_list_1)
-    u_fin_obs_list_2.append(u_obs_list_2)
-
-# Storing data     
-
-u_fin_obs_arr_1 = np.array(u_fin_obs_list_1)
-u_fin_obs_arr_2 = np.array(u_fin_obs_list_2)
-u_fin_true_data_1 = np.save("u_obs_true_1.npy", u_fin_obs_arr_1)
-u_fin_true_data_2 = np.save("u_obs_true_2.npy", u_fin_obs_arr_2)
-
-u_exact_1 = np.load('u_true_1.npy')
-u_exact_2 = np.load('u_true_2.npy')
-
-u_all_obs_1 = np.load('u_obs_true_1.npy')
-u_all_obs_2 = np.load('u_obs_true_2.npy')
-
-# Plotting data
-plt.plot(u_exact_1, 'r-', label = 'exact_1')
-plt.plot(u_exact_2, 'b-', label = 'exact_2')
-for i in range(N_obs):
-    plt.plot(u_all_obs_1[i,:], '-.',label = 'obs_data_1')
-    plt.plot(u_all_obs_2[i,:], '--',label = 'obs_data_2')
-#plt.plot(u_exact_obs)
-plt.legend()
-plt.show()
+    u1_true_all[i,:] = u_1
+    u2_true_all[i,:] = u_2
+    np.save("u1_true_data.npy", u1_true_all)
+    np.save("u2_true_data.npy", u2_true_all)
+    u_1_noise = np.random.normal(0.0, 0.025, (n+1)**2 ) # mean = 0, sd = 0.05
+    u_2_noise = np.random.normal(0.0, 0.025, (n+1)**2 ) 
+    u1_obs = u_1 + u_1_noise
+    u2_obs = u_2 + u_2_noise
+    u1_obs_all[i,:] = u1_obs
+    u2_obs_all[i,:] = u2_obs
+    np.save("u1_obs_data.npy", u1_obs_all)
+    np.save("u2_obs_data.npy", u2_obs_all)
