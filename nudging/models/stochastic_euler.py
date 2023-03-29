@@ -63,12 +63,12 @@ class Euler_SD(base_model):
         self.dW = TrialFunction(self.V)
         self.dW_phi = TestFunction(self.V)
         # Fix the white noise
-        self.deta = Function(self.V)
-        self.deta.assign(self.rg.normal(self.V, 0., 1.0))
+        self.dXi = Function(self.V)
+        self.dXi.assign(self.rg.normal(self.V, 0., 1))
         # Bilinear form
         bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary",))
         self.a_dW = inner(grad(self.dW), grad(self.dW_phi))*dx + self.dW*self.dW_phi*dx
-        self.L_dW = self.deta*self.dW_phi*dx
+        self.L_dW = self.dXi*self.dW_phi*dx
         # Solve for noise 
         self.dW_n = Function(self.V)
         #make a solver 
@@ -86,6 +86,8 @@ class Euler_SD(base_model):
         a_flux = (dot(jump(self.p), self.un("+") * self.q("+") - self.un("-") * self.q("-")))*dS
         a_noise = self.p*self.dW_n *dx
         arhs = a_mass - self.dt*(a_int+ a_flux+a_noise) 
+        #arhs = a_mass - self.dt*(a_int+ a_flux) 
+        
         #a_mass = a_mass + a_noise
       
         self.q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)
@@ -142,6 +144,7 @@ class Euler_SD(base_model):
         self.q1 = self.X[0]
         self.psi_solver.solve()
         self.u  = self.gradperp(self.psi0)
+        #print(type(self.u[0]))
         Y_1 = Function(self.VVOM)
         Y_2 = Function(self.VVOM)
         Y_1.interpolate(self.u[0])
@@ -163,9 +166,9 @@ class Euler_SD(base_model):
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
-        self.deta = Function(self.V)
+        self.dXi = Function(self.V)
         for i in range(self.nsteps):
-               self.deta.assign(self.rg.normal(self.V, 0., 1.0))
+               self.dXi.assign(self.rg.normal(self.V, 0., 0.05))
                self.dW_solver.solve()
                count += 1
                X[count].assign(c1*X[count] + c2*self.dW_n)

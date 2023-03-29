@@ -15,17 +15,18 @@ add observation noise N(0, sigma^2)
 """
 #np.random.seed(138)
 n = 4
-nsteps = 10
+nsteps = 5
 model = Euler_SD(n, nsteps=nsteps)
 model.setup()
 X_truth = model.allocate()
 q0 = X_truth[0]
 x = SpatialCoordinate(model.mesh)
-q0.interpolate(0.1*sin(x[0])*sin(x[1]))
+q0.interpolate(sin(8*pi*x[0])*sin(8*pi*x[1])+0.4*cos(6*pi*x[0])*cos(6*pi*x[1])
+                        +0.02*sin(2*pi*x[0])+0.02*sin(2*pi*x[1])+0.3*cos(10*pi*x[0])*cos(4*pi*x[1])) # sin 8px 
 
 
 
-N_obs = 15
+N_obs = 5
 
 model.randomize(X_truth) # poppulating noise term with PV 
 model.run(X_truth, X_truth) # use noise term to solve for PV
@@ -52,8 +53,8 @@ for i in range(N_obs):
     u2_true_all[i,:] = u_2
     np.save("u1_true_data.npy", u1_true_all)
     np.save("u2_true_data.npy", u2_true_all)
-    u_1_noise = np.random.normal(0.0, 0.025, (n+1)**2 ) # mean = 0, sd = 0.05
-    u_2_noise = np.random.normal(0.0, 0.025, (n+1)**2 ) 
+    u_1_noise = np.random.normal(0.0, 0.05, (n+1)**2 ) # mean = 0, sd = 0.05
+    u_2_noise = np.random.normal(0.0, 0.05, (n+1)**2 ) 
     u1_obs = u_1 + u_1_noise
     u2_obs = u_2 + u_2_noise
     u1_obs_all[i,:] = u1_obs
