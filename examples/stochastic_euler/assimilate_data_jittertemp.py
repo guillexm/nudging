@@ -20,12 +20,12 @@ n = 4
 nsteps = 5
 model = Euler_SD(n, nsteps=nsteps)
 
-MALA = False
+MALA = True
 verbose = False
-# jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
-#                             verbose=verbose, MALA=MALA)
+jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
+                            verbose=verbose, MALA=MALA)
 
-jtfilter = bootstrap_filter()
+#jtfilter = bootstrap_filter()
 
 # #Load data
 u1_exact = np.load('u1_true_data.npy')

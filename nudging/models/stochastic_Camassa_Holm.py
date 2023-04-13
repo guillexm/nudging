@@ -105,7 +105,7 @@ class Camsholm(base_model):
         self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
         self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
-    def run(self, X0, X1):
+    def run(self, X0, X1, operation = None):
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
         self.w0.assign(self.X[0])
@@ -118,8 +118,11 @@ class Camsholm(base_model):
 
             self.usolver.solve()
             self.w0.assign(self.w1)
+            if operation:
+               operation(self.w0)
         X1[0].assign(self.w0) # save sol at the nstep th time 
-
+        
+        
     def controls(self):
         controls_list = []
         for i in range(len(self.X)):
@@ -131,6 +134,16 @@ class Camsholm(base_model):
         Y = Function(self.VVOM)
         Y.interpolate(u)
         return Y
+
+
+    # def call_simulated_obs(self):
+    #     m, u = self.w0.split()
+    #     Y = Function(self.VVOM)
+    #     Y.interpolate(u)
+    #     Z = Y.dat.data[:]
+    #     print(Z)
+    #     return Z
+
 
     def allocate(self):
         particle = [Function(self.W)]

@@ -111,26 +111,27 @@ class Euler_SD(base_model):
     def run(self, X0, X1):
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
-        for step in range(self.nsteps):
-            # Compute the streamfunction for the known value of q0
-            self.q1.assign(self.X[0])
-            self.psi_solver.solve()
-            self.q_solver.solve()
+            
+        self.q0.assign(self.X[0])
+        # for step in range(self.nsteps):
+        #     # Compute the streamfunction for the known value of q0
+        #     self.q1.assign(self.q0)
+        #     self.psi_solver.solve()
+        #     self.q_solver.solve()
 
-            # Find intermediate solution q^(1)
-            self.q1.assign(self.dq1)
-            self.psi_solver.solve()
-            self.q_solver.solve()
+        #     # Find intermediate solution q^(1)
+        #     self.q1.assign(self.dq1)
+        #     self.psi_solver.solve()
+        #     self.q_solver.solve()
 
-            # Find intermediate solution q^(2)
-            self.q1.assign(0.75 * self.q0 + 0.25 * self.dq1)
-            self.psi_solver.solve()
-            self.q_solver.solve()
+        #     # Find intermediate solution q^(2)
+        #     self.q1.assign(0.75 * self.q0 + 0.25 * self.dq1)
+        #     self.psi_solver.solve()
+        #     self.q_solver.solve()
 
-            # Find new solution q^(n+1)
-            self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
+        #     # Find new solution q^(n+1)
+        #     self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
         X1[0].assign(self.q0) # save sol at the nstep th time 
-        return X1
 
     def controls(self):
         controls_list = []
@@ -140,15 +141,15 @@ class Euler_SD(base_model):
         
     #only for velocity
     def obs(self):
-        self.run(self.X, self.X)
-        self.q1 = self.X[0]
+        #self.run(self.X, self.X)
+        self.q1.assign(self.q0)
         self.psi_solver.solve()
-        self.u  = self.gradperp(self.psi0)
+        u  = self.gradperp(self.psi0)
         #print(type(self.u[0]))
         Y_1 = Function(self.VVOM)
         Y_2 = Function(self.VVOM)
-        Y_1.interpolate(self.u[0])
-        Y_2.interpolate(self.u[1])
+        Y_1.interpolate(self.X[0])
+        Y_2.interpolate(self.X[0])
         return Y_1, Y_2
 
 

@@ -53,13 +53,15 @@ class base_filter(object, metaclass=ABCMeta):
         self.proposal_ensemble = []
         self.ext_ensemble = []
         self.asm_ensemble = []
+        self.call_ensemble = []
         for i in range(self.nensemble[self.ensemble_rank]):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
             self.proposal_ensemble.append(model.allocate())
             self.ext_ensemble.append(model.allocate())
             self.asm_ensemble.append(model.allocate())
-
+            self.call_ensemble.append(model.allocate())
+            
         # some numbers for shared array and owned array
         self.nlocal = self.nensemble[self.ensemble_rank]
         self.nglobal = int(np.sum(self.nensemble))
@@ -100,7 +102,7 @@ class base_filter(object, metaclass=ABCMeta):
             weights = renormalise(theta*logweights)
             self.ess = 1/np.sum(weights**2)
             # PETSc.Sys.Print(weights, "W")
-            PETSc.Sys.Print(self.ess, "Ess")
+            #PETSc.Sys.Print(self.ess, "Ess")
             
 
         # compute resampling protocol on rank 0
@@ -113,7 +115,7 @@ class base_filter(object, metaclass=ABCMeta):
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
         self.s_copy = s_copy
-        PETSc.Sys.Print("S_copy", self.s_copy)
+        #PETSc.Sys.Print("S_copy", self.s_copy)
 
         mpi_requests = []
         
@@ -190,13 +192,13 @@ class sim_filter(base_filter):
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
+ 
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
         # forward model step
         for i in range(N):
             self.model.randomize(self.ensemble[i])
-            self.model.run(self.ensemble[i], self.ensemble[i])   
-
+            self.model.run(self.ensemble[i], self.ensemble[i])
             Y = self.model.obs()
             self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
         self.parallel_resample()
@@ -300,15 +302,15 @@ class jittertemp_filter(base_filter):
                             elif type(y)==list:
                                  self.m = self.model.controls()
                                  for y0 in y:
+                                      print("here")
                                       self.m += [Control(y0)]
                             else:
                                 self.m = self.model.controls()
                             #requires log_likelihood to return symbolic
                             Y = self.model.obs()
-                            self.MALA_J = assemble(log_likelihood(y,Y))
+                            self.MALA_J = assemble(self.model.X[0]**2*dx)
                             self.Jhat = ReducedFunctional(self.MALA_J, self.m)
                             pyadjoint.tape.pause_annotation()
-
                         # run the model and get the functional value with
                         # ensemble[i]
                         if type(y)==Function:
@@ -319,9 +321,11 @@ class jittertemp_filter(base_filter):
                                  for y0 in y:
                                       Jlist += [y0]
                                  #print(Jlist)
-                        self.Jhat(Jlist)
+                        #self.Jhat(Jlist)
                         # use the taped model to get the derivative
+                        print("controls", self.m[0].control, "\nertrtr", self.model.X[0])
                         g = self.Jhat.derivative()
+                        #asdf
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])

@@ -14,15 +14,15 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
 nsteps = 5
 xpoints = 40
 model = Camsholm(100, nsteps, xpoints)
-MALA = False
+MALA = True
 verbose = False
 jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
                             verbose=verbose, MALA=MALA)
 
-# jtfilter = bootstrap_filter()
+#jtfilter = bootstrap_filter()
 
-nensemble = [15,15,15,15,15]
-#nensemble = [2,2,2,2,2]
+# nensemble = [15,15,15,15,15]
+nensemble = [10,10,10,10,10]
 jtfilter.setup(nensemble, model)
 
 x, = SpatialCoordinate(model.mesh) 
@@ -47,41 +47,39 @@ def log_likelihood(y, Y):
 #Load data
 y_exact = np.load('y_true.npy')
 y = np.load('y_obs.npy') 
-#print(np.shape(y))
 N_obs = y.shape[0]
 
 yVOM = Function(model.VVOM)
 
 # prepare shared arrays for data
 y_e_list = []
-y_e_fwd_list = []
-y_e_asmfwd_list = []
+#y_e_asmfwd_list = []
+y_sim_obs_list = []
 for m in range(y.shape[1]):        
     y_e_shared = SharedArray(partition=nensemble, 
-                                 comm=jtfilter.subcommunicators.ensemble_comm)
-    y_e_fwd_shared = SharedArray(partition=nensemble, 
-                                 comm=jtfilter.subcommunicators.ensemble_comm)
-    y_e_asmfwd_shared = SharedArray(partition=nensemble, 
+                                  comm=jtfilter.subcommunicators.ensemble_comm)
+    # y_e_asmfwd_shared = SharedArray(partition=nensemble, 
+    #                              comm=jtfilter.subcommunicators.ensemble_comm)
+    y_sim_obs_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
     y_e_list.append(y_e_shared)
-    y_e_fwd_list.append(y_e_fwd_shared)
-    y_e_asmfwd_list.append(y_e_asmfwd_shared)
+    #y_e_asmfwd_list.append(y_e_asmfwd_shared)
+    y_sim_obs_list.append(y_sim_obs_shared)
 
 ys = y.shape
 if COMM_WORLD.rank == 0:
     y_e = np.zeros((np.sum(nensemble), ys[0], ys[1]))
-    y_e_fwd = np.zeros((np.sum(nensemble), ys[0], ys[1]))
     y_e_asmfwd = np.zeros((np.sum(nensemble), ys[0], ys[1]))
+    y_sim_obs_alltime_step = np.zeros((np.sum(nensemble),nsteps,  ys[1]))
+    y_sim_obs_allobs_step = np.zeros((np.sum(nensemble),nsteps*N_obs,  ys[1]))
+    #print(np.shape(y_sim_obs_allobs_step))
 
-# Simply forwad model to get  forecast step
-for k in range(N_obs):
 
-    for i in range(nensemble[jtfilter.ensemble_rank]):
-        model.randomize(jtfilter.ensemble[i])
-        model.run(jtfilter.ensemble[i], jtfilter.ext_ensemble[i])
-        fwd_obsdata = model.obs().dat.data[:]
-        for m in range(y.shape[1]):
-            y_e_fwd_list[m].dlocal[i] = fwd_obsdata[m]
+mylist = []
+def mycallback(ensemble):
+   X = ensemble[0]
+   mylist.append(X.at(20))
+
 
 
 
@@ -91,15 +89,33 @@ for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
     yVOM.dat.data[:] = y[k, :]
 
-    for i in range(nensemble[jtfilter.ensemble_rank]):
-        model.randomize(jtfilter.ensemble[i])
-        model.run(jtfilter.ensemble[i], jtfilter.asm_ensemble[i])
-        asmfwd_obsdata = model.obs().dat.data[:]
+
+    for step in range(nsteps):
+        for i in  range(nensemble[jtfilter.ensemble_rank]):
+            #model.randomize(jtfilter.ensemble[i])
+            model.run(jtfilter.ensemble[i], jtfilter.ensemble[i])
+            fwd_simdata = model.obs().dat.data[:]
+            for m in range(y.shape[1]):
+                y_sim_obs_list[m].dlocal[i] = fwd_simdata[m]
+
+
         for m in range(y.shape[1]):
-            y_e_asmfwd_list[m].dlocal[i] = asmfwd_obsdata[m]
+            y_sim_obs_list[m].synchronise()
+            if COMM_WORLD.rank == 0:
+                y_sim_obs_alltime_step[:, step, m] = y_sim_obs_list[m].data()
+                y_sim_obs_allobs_step[:,nsteps*k+step,m] = y_sim_obs_alltime_step[:, step, m]
+                
+
+    # for i in range(nensemble[jtfilter.ensemble_rank]):
+    #     model.randomize(jtfilter.ensemble[i])
+    #     model.run(jtfilter.ensemble[i], jtfilter.asm_ensemble[i])
+    #     asmfwd_obsdata = model.obs().dat.data[:]
+    #     for m in range(y.shape[1]):
+    #         y_e_asmfwd_list[m].dlocal[i] = asmfwd_obsdata[m]
     
 
     jtfilter.assimilation_step(yVOM, log_likelihood)
+
         
     for i in range(nensemble[jtfilter.ensemble_rank]):
         model.w0.assign(jtfilter.ensemble[i][0])
@@ -112,14 +128,16 @@ for k in range(N_obs):
 
     for m in range(y.shape[1]):
         y_e_list[m].synchronise()
-        y_e_fwd_list[m].synchronise()
-        y_e_asmfwd_list[m].synchronise()
+        #y_e_asmfwd_list[m].synchronise()
         if COMM_WORLD.rank == 0:
             y_e[:, k, m] = y_e_list[m].data()
-            y_e_fwd [:, k, m] = y_e_fwd_list[m].data()
-            y_e_asmfwd [:, k, m] = y_e_asmfwd_list[m].data()
+            #y_e_asmfwd [:, k, m] = y_e_asmfwd_list[m].data()
 
 if COMM_WORLD.rank == 0:
-    np.save("ensemble_simulated_obs.npy", y_e)
-    np.save("ensemble_forward_obs.npy", y_e_fwd)
-    np.save("final_ensemble_forward.npy", y_e_asmfwd)
+    print("Time shape", y_sim_obs_alltime_step.shape)
+    #print("Time", y_sim_obs_alltime_step)
+    print("Obs shape", y_sim_obs_allobs_step.shape)
+    print("Ensemble member", y_e.shape)
+    np.save("assimilated_ensemble.npy", y_e)
+    np.save("simualated_all_time_obs.npy", y_sim_obs_allobs_step)
+

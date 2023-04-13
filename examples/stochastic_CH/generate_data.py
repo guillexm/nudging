@@ -21,18 +21,16 @@ _, u0 = X_truth[0].split()
 x, = SpatialCoordinate(model.mesh)
 u0.interpolate(0.2*2/(exp(x-403./15.) + exp(-x+403./15.)) + 0.5*2/(exp(x-203./15.)+exp(-x+203./15.)))
 
-N_obs = 40
+N_obs = 30
 
-y_true_VOM = model.obs()
-y_true = y_true_VOM.dat.data[:]
+y_true = model.obs().dat.data[:]
 y_obs_full = np.zeros((N_obs, np.size(y_true)))
 y_true_full = np.zeros((N_obs, np.size(y_true)))
 
 for i in range(N_obs):
     model.randomize(X_truth)
-    model.run(X_truth, X_truth)
-    y_true_VOM = model.obs()
-    y_true = y_true_VOM.dat.data[:]
+    model.run(X_truth, X_truth) # run method for every time step
+    y_true = model.obs().dat.data[:]
 
     y_true_full[i,:] = y_true
     y_true_data = np.save("y_true.npy", y_true_full)
