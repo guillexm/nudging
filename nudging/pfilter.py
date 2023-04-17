@@ -9,16 +9,6 @@ from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
 from firedrake_adjoint import *
 pyadjoint.tape.pause_annotation()
 
-def renormalise(L):
-    """
-    input : L, array of negative log likelihoods
-    return w_i where
-    w_i = exp(-L_i)/sum(exp(-L))
-    """
-    Lmin = np.min(L)
-    logw = - (L-Lmin) - np.log(np.sum(np.exp(-(L-Lmin))))
-    return np.exp(logw)
-
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
     new_ensemble = []
@@ -51,17 +41,11 @@ class base_filter(object, metaclass=ABCMeta):
         self.ensemble = []
         self.new_ensemble = []
         self.proposal_ensemble = []
-        self.ext_ensemble = []
-        self.asm_ensemble = []
-        self.call_ensemble = []
         for i in range(self.nensemble[self.ensemble_rank]):
             self.ensemble.append(model.allocate())
             self.new_ensemble.append(model.allocate())
             self.proposal_ensemble.append(model.allocate())
-            self.ext_ensemble.append(model.allocate())
-            self.asm_ensemble.append(model.allocate())
-            self.call_ensemble.append(model.allocate())
-            
+
         # some numbers for shared array and owned array
         self.nlocal = self.nensemble[self.ensemble_rank]
         self.nglobal = int(np.sum(self.nensemble))
@@ -95,15 +79,11 @@ class base_filter(object, metaclass=ABCMeta):
         
         self.weight_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
-            logweights = self.weight_arr.data()
-            #PETSc.Sys.Print(logweights, "Llogweights")
-            # renormalise in log space
-            theta = 1
-            weights = renormalise(theta*logweights)
+            weights = self.weight_arr.data()
+            # renormalise
+            weights = np.exp(-dtheta*weights)
+            weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
-            # PETSc.Sys.Print(weights, "W")
-            #PETSc.Sys.Print(self.ess, "Ess")
-            
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
@@ -115,7 +95,6 @@ class base_filter(object, metaclass=ABCMeta):
         self.s_arr.synchronise()
         s_copy = self.s_arr.data()
         self.s_copy = s_copy
-        #PETSc.Sys.Print("S_copy", self.s_copy)
 
         mpi_requests = []
         
@@ -192,13 +171,13 @@ class sim_filter(base_filter):
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
- 
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
         # forward model step
         for i in range(N):
             self.model.randomize(self.ensemble[i])
-            self.model.run(self.ensemble[i], self.ensemble[i])
+            self.model.run(self.ensemble[i], self.ensemble[i])   
+
             Y = self.model.obs()
             self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
         self.parallel_resample()
@@ -235,15 +214,12 @@ class jittertemp_filter(base_filter):
             ess =0.
             while ess < ess_tol*sum(self.nensemble):
                 # renormalise using dtheta
-                # use log formulae to avoid underflow
-                weights = renormalise(dtheta*logweights)
-                #PETSc.Sys.Print(weights, "dtheta", dtheta)
+                weights = np.exp(-dtheta*logweights)
+                weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
-                #PETSc.Sys.Print(ess, "Ess")
-                ess_list.append(ess)
                 if ess < ess_tol*sum(self.nensemble):
                     dtheta = 0.5*dtheta
-            PETSc.Sys.Print(ess_list, "Ess")
+
             # abuse owned array to broadcast dtheta
             for i in range(self.nglobal):
                 self.dtheta_arr[i]=dtheta
@@ -257,8 +233,8 @@ class jittertemp_filter(base_filter):
         
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
-        logweights = np.zeros(N)
-        new_logweights = np.zeros(N)
+        weights = np.zeros(N)
+        new_weights = np.zeros(N)
         self.ess_temper = []
         self.theta_temper = []
 
@@ -297,35 +273,23 @@ class jittertemp_filter(base_filter):
                             self.model.run(self.ensemble[i],
                                            self.new_ensemble[i])
                             #set the controls
-                            if type(y)==Function:
+                            if type(y == Function):
                                 self.m = self.model.controls() + [Control(y)]
-                            elif type(y)==list:
-                                 self.m = self.model.controls()
-                                 for y0 in y:
-                                      print("here")
-                                      self.m += [Control(y0)]
                             else:
                                 self.m = self.model.controls()
                             #requires log_likelihood to return symbolic
                             Y = self.model.obs()
-                            self.MALA_J = assemble(self.model.X[0]**2*dx)
+                            self.MALA_J = assemble(log_likelihood(y,Y))
                             self.Jhat = ReducedFunctional(self.MALA_J, self.m)
+                            tape = pyadjoint.get_working_tape()
+                            tape.visualise_pdf("t.pdf")
                             pyadjoint.tape.pause_annotation()
+
                         # run the model and get the functional value with
                         # ensemble[i]
-                        if type(y)==Function:
-                                self.Jhat(self.ensemble[i]+[y])
-                        elif type(y)==list:
-                                 Jlist = []
-                                 Jlist += self.ensemble[i]
-                                 for y0 in y:
-                                      Jlist += [y0]
-                                 #print(Jlist)
-                        #self.Jhat(Jlist)
+                        self.Jhat(self.ensemble[i]+[y])
                         # use the taped model to get the derivative
-                        print("controls", self.m[0].control, "\nertrtr", self.model.X[0])
                         g = self.Jhat.derivative()
-                        #asdf
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
@@ -346,22 +310,20 @@ class jittertemp_filter(base_filter):
 
                     # particle weights
                     Y = self.model.obs()
-                    new_logweights[i] = theta*assemble(log_likelihood(y,Y))
+                    new_weights[i] = exp(-theta*assemble(log_likelihood(y,Y)))
                     #accept reject of MALA and Jittering 
                     if l == 0:
-                        logweights[i] = new_logweights[i]
+                        weights[i] = new_weights[i]
                     else:
                         # Metropolis MCMC
-                        
                         if self.MALA:
-                            log_p_accept = 0
+                            p_accept = 1
                         else:
-                            log_p_accept = min(0, -new_logweights[i]
-                                               +logweights[i])
+                            p_accept = min(1, new_weights[i]/weights[i])
                         # accept or reject tool
                         u = self.model.rg.uniform(self.model.R, 0., 1.0)
-                        if np.log(u.dat.data[:]) < log_p_accept:
-                            logweights[i] = new_logweights[i]
+                        if u.dat.data[:] < p_accept:
+                            weights[i] = new_weights[i]
                             self.model.copy(self.proposal_ensemble[i],
                                             self.ensemble[i])
 

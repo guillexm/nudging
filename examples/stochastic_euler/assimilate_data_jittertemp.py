@@ -21,17 +21,17 @@ nsteps = 5
 model = Euler_SD(n, nsteps=nsteps)
 
 MALA = True
-verbose = False
+verbose = True
 jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
                             verbose=verbose, MALA=MALA)
 
-#jtfilter = bootstrap_filter()
+# jtfilter = bootstrap_filter()
 
 # #Load data
 u1_exact = np.load('u1_true_data.npy')
-u2_exact = np.load('u2_true_data.npy')
+#u2_exact = np.load('u2_true_data.npy')
 u_vel_1 = np.load('u1_obs_data.npy') 
-u_vel_2 = np.load('u2_obs_data.npy') 
+#u_vel_2 = np.load('u2_obs_data.npy') 
 
 nensemble = [5,5,5,5,5]
 
@@ -72,7 +72,8 @@ for i in range(nensemble[jtfilter.ensemble_rank]):
 # np.save("u2_ensemble_data.npy", u2_ensembles)
 
 def log_likelihood(y, Y):
-    ll = 0.5*(1/0.05**2)*((y[0]-Y[0])**2 + (y[1]-Y[1])**2)*dx
+    #ll = 0.5*(1/0.05**2)*((y[0]-Y[0])**2 + (y[1]-Y[1])**2)*dx
+    ll = (y-Y)**2/0.05**2/2*dx
     return ll
 
     
@@ -82,92 +83,92 @@ N_obs = u_vel_1.shape[0]
 
 # VOM defintion
 u1_VOM = Function(model.VVOM)
-u2_VOM = Function(model.VVOM)
-u_VOM = [u1_VOM]
-u_VOM.append(u2_VOM)
+#u2_VOM = Function(model.VVOM)
+#u_VOM = [u1_VOM]
+#u_VOM.append(u2_VOM)
 
 # prepare shared arrays for data
 u1_e_list = []
-u2_e_list = []
+#u2_e_list = []
 u1_e_fwd_list = []
-u2_e_fwd_list = []
+#u2_e_fwd_list = []
 for m in range(u_vel_1.shape[1]):        
     u1_e_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
-    u2_e_shared = SharedArray(partition=nensemble, 
-                                 comm=jtfilter.subcommunicators.ensemble_comm)
+    # u2_e_shared = SharedArray(partition=nensemble, 
+    #                              comm=jtfilter.subcommunicators.ensemble_comm)
     u1_e_fwd_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
-    u2_e_fwd_shared = SharedArray(partition=nensemble, 
-                                 comm=jtfilter.subcommunicators.ensemble_comm)
+    # u2_e_fwd_shared = SharedArray(partition=nensemble, 
+    #                              comm=jtfilter.subcommunicators.ensemble_comm)
     u1_e_list.append(u1_e_shared)
-    u2_e_list.append(u2_e_shared)
+    #u2_e_list.append(u2_e_shared)
     u1_e_fwd_list.append(u1_e_fwd_shared)
-    u2_e_fwd_list.append(u2_e_fwd_shared)
+    #u2_e_fwd_list.append(u2_e_fwd_shared)
 
 
 ushape = u_vel_1.shape
 if COMM_WORLD.rank == 0:
     u1_e = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
-    u2_e = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
+    #u2_e = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
     u1_e_fwd = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
-    u2_e_fwd = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
+    #u2_e_fwd = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
 
 
 
 # Simply forwad model to get  forecast step
-for k in range(N_obs):
+# for k in range(N_obs):
     
-    for i in range(nensemble[jtfilter.ensemble_rank]):
-        #model.randomize(jtfilter.ensemble[i])
-        model.run(jtfilter.ensemble[i], jtfilter.ext_ensemble[i])
-        fwd_obsdata_1 = model.obs()[0].dat.data[:]
-        fwd_obsdata_2 = model.obs()[1].dat.data[:]
-        for m in range(u_vel_1.shape[1]):
-            u1_e_fwd_list[m].dlocal[i] = fwd_obsdata_1[m]
-            u2_e_fwd_list[m].dlocal[i] = fwd_obsdata_2[m]
+#     for i in range(nensemble[jtfilter.ensemble_rank]):
+#         #model.randomize(jtfilter.ensemble[i])
+#         model.run(jtfilter.ensemble[i], jtfilter.ext_ensemble[i])
+#         fwd_obsdata_1 = model.obs().dat.data[:]
+#         #fwd_obsdata_2 = model.obs()[1].dat.data[:]
+#         for m in range(u_vel_1.shape[1]):
+#             u1_e_fwd_list[m].dlocal[i] = fwd_obsdata_1[m]
+#             #u2_e_fwd_list[m].dlocal[i] = fwd_obsdata_2[m]
 
 # do assimiliation step
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
-    u_VOM[0].dat.data[:] = u_vel_1[k, :]
-    u_VOM[1].dat.data[:] = u_vel_2[k, :]
+    u1_VOM.dat.data[:] = u_vel_1[k, :]
+    #u_VOM[1].dat.data[:] = u_vel_2[k, :]
 
-    for i in range(nensemble[jtfilter.ensemble_rank]):
-        #model.randomize(jtfilter.ensemble[i])
-        model.run(jtfilter.ensemble[i], jtfilter.ext_ensemble[i])
-        fwd_obsdata_1 = model.obs()[0].dat.data[:]
-        fwd_obsdata_2 = model.obs()[1].dat.data[:]
-        for m in range(u_vel_1.shape[1]):
-            u1_e_fwd_list[m].dlocal[i] = fwd_obsdata_1[m]
-            u2_e_fwd_list[m].dlocal[i] = fwd_obsdata_2[m]
+    # for i in range(nensemble[jtfilter.ensemble_rank]):
+    #     #model.randomize(jtfilter.ensemble[i])
+    #     model.run(jtfilter.ensemble[i], jtfilter.ext_ensemble[i])
+    #     fwd_obsdata_1 = model.obs().dat.data[:]
+    #     #fwd_obsdata_2 = model.obs()[1].dat.data[:]
+    #     for m in range(u_vel_1.shape[1]):
+    #         u1_e_fwd_list[m].dlocal[i] = fwd_obsdata_1[m]
+    #         #u2_e_fwd_list[m].dlocal[i] = fwd_obsdata_2[m]
 
-    jtfilter.assimilation_step(u_VOM, log_likelihood)
+    jtfilter.assimilation_step(u1_VOM, log_likelihood)
         
     for i in range(nensemble[jtfilter.ensemble_rank]):
         model.q0.assign(jtfilter.ensemble[i][0])
-        obsdata_1 = model.obs()[0].dat.data[:]
-        obsdata_2 = model.obs()[1].dat.data[:]
+        obsdata_1 = model.obs().dat.data[:]
+        #obsdata_2 = model.obs()[1].dat.data[:]
         for m in range(u_vel_1 .shape[1]):
             u1_e_list[m].dlocal[i] = obsdata_1[m]
-            u2_e_list[m].dlocal[i] = obsdata_2[m]
+            #u2_e_list[m].dlocal[i] = obsdata_2[m]
 
     for m in range(u_vel_1.shape[1]):
         u1_e_list[m].synchronise()
-        u2_e_list[m].synchronise()
+        #u2_e_list[m].synchronise()
         u1_e_fwd_list[m].synchronise()
-        u2_e_fwd_list[m].synchronise()
+        #u2_e_fwd_list[m].synchronise()
         if COMM_WORLD.rank == 0:
             u1_e[:, k, m] = u1_e_list[m].data()
-            u2_e[:, k, m] = u2_e_list[m].data()
-            u1_e_fwd[:, k, m] = u1_e_fwd_list[m].data()
-            u2_e_fwd[:, k, m] = u2_e_fwd_list[m].data()
+            #u2_e[:, k, m] = u2_e_list[m].data()
+            #u1_e_fwd[:, k, m] = u1_e_fwd_list[m].data()
+            #u2_e_fwd[:, k, m] = u2_e_fwd_list[m].data()
 
 PETSc.Sys.Print("--- %s seconds ---" % (time.time() - start_time))
 
 if COMM_WORLD.rank == 0:
     np.save("Velocity_1_ensemble_simulated_obs.npy", u1_e)
-    np.save("Velocity_2_ensemble_simulated_obs.npy", u2_e)
+    #np.save("Velocity_2_ensemble_simulated_obs.npy", u2_e)
     np.save("Velocity_1_ensemble_forward_obs.npy", u1_e)
-    np.save("Velocity_2_ensemble_forward_obs.npy", u2_e)
+    #np.save("Velocity_2_ensemble_forward_obs.npy", u2_e)
 

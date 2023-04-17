@@ -14,15 +14,15 @@ from nudging.models.stochastic_Camassa_Holm import Camsholm
 nsteps = 5
 xpoints = 40
 model = Camsholm(100, nsteps, xpoints)
-MALA = True
+MALA = False
 verbose = False
-jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
-                            verbose=verbose, MALA=MALA)
+# jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
+#                             verbose=verbose, MALA=MALA)
 
-#jtfilter = bootstrap_filter()
+jtfilter = bootstrap_filter()
 
 # nensemble = [15,15,15,15,15]
-nensemble = [10,10,10,10,10]
+nensemble = [20,20,20,20,20]
 jtfilter.setup(nensemble, model)
 
 x, = SpatialCoordinate(model.mesh) 
@@ -77,8 +77,9 @@ if COMM_WORLD.rank == 0:
 
 mylist = []
 def mycallback(ensemble):
+   xpt = np.arange(0.5,40.0) # need to change the according to generate data
    X = ensemble[0]
-   mylist.append(X.at(20))
+   mylist.append(X.at(xpt))
 
 
 
@@ -103,16 +104,7 @@ for k in range(N_obs):
             y_sim_obs_list[m].synchronise()
             if COMM_WORLD.rank == 0:
                 y_sim_obs_alltime_step[:, step, m] = y_sim_obs_list[m].data()
-                y_sim_obs_allobs_step[:,nsteps*k+step,m] = y_sim_obs_alltime_step[:, step, m]
-                
-
-    # for i in range(nensemble[jtfilter.ensemble_rank]):
-    #     model.randomize(jtfilter.ensemble[i])
-    #     model.run(jtfilter.ensemble[i], jtfilter.asm_ensemble[i])
-    #     asmfwd_obsdata = model.obs().dat.data[:]
-    #     for m in range(y.shape[1]):
-    #         y_e_asmfwd_list[m].dlocal[i] = asmfwd_obsdata[m]
-    
+                y_sim_obs_allobs_step[:,nsteps*k+step,m] = y_sim_obs_alltime_step[:, step, m]                
 
     jtfilter.assimilation_step(yVOM, log_likelihood)
 

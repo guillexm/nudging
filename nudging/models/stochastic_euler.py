@@ -44,11 +44,12 @@ class Euler_SD(base_model):
 
         # Build the weak form for the inversion
         self.Apsi = (inner(grad(self.psi), grad(self.phi)) +  self.psi * self.phi) * dx
-        self.Lpsi = -self.q1 * self.phi * dx
+        Lpsi = -self.q1 * self.phi * dx
+        print(type(Lpsi), "type lpsi")
 
         bc1 = DirichletBC(self.Vcg, 0.0, (1, 2))
 
-        self.psi_problem = LinearVariationalProblem(self.Apsi, self.Lpsi, self.psi0, bcs=bc1, constant_jacobian=True)
+        self.psi_problem = LinearVariationalProblem(self.Apsi, Lpsi, self.psi0, bcs=bc1, constant_jacobian=True)
         self.psi_solver = LinearVariationalSolver(self.psi_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
 
         # setup the second equation
@@ -68,11 +69,12 @@ class Euler_SD(base_model):
         # Bilinear form
         bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary",))
         self.a_dW = inner(grad(self.dW), grad(self.dW_phi))*dx + self.dW*self.dW_phi*dx
-        self.L_dW = self.dXi*self.dW_phi*dx
+        L_dW = self.dXi*self.dW_phi*dx
+        print(type(L_dW), "type L_dw")
         # Solve for noise 
         self.dW_n = Function(self.V)
         #make a solver 
-        self.dW_problem = LinearVariationalProblem(self.a_dW, self.L_dW, self.dW_n, bcs=bcs_dw)
+        self.dW_problem = LinearVariationalProblem(self.a_dW, L_dW, self.dW_n, bcs=bcs_dw)
         self.dW_solver = LinearVariationalSolver(self.dW_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
         ################################################################################################
 
@@ -89,7 +91,7 @@ class Euler_SD(base_model):
         #arhs = a_mass - self.dt*(a_int+ a_flux) 
         
         #a_mass = a_mass + a_noise
-      
+        print(type(action(arhs, self.q1)), 'action')
         self.q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)
         self.q_solver = LinearVariationalSolver(self.q_prob,
                                    solver_parameters={"ksp_type": "preonly",
@@ -113,24 +115,24 @@ class Euler_SD(base_model):
             self.X[i].assign(X0[i])
             
         self.q0.assign(self.X[0])
-        # for step in range(self.nsteps):
-        #     # Compute the streamfunction for the known value of q0
-        #     self.q1.assign(self.q0)
-        #     self.psi_solver.solve()
-        #     self.q_solver.solve()
+        for step in range(0): #self.nsteps):
+            # Compute the streamfunction for the known value of q0
+            self.q1.assign(self.q0)
+            self.psi_solver.solve()
+            self.q_solver.solve()
 
-        #     # Find intermediate solution q^(1)
-        #     self.q1.assign(self.dq1)
-        #     self.psi_solver.solve()
-        #     self.q_solver.solve()
+            # Find intermediate solution q^(1)
+            self.q1.assign(self.dq1)
+            self.psi_solver.solve()
+            self.q_solver.solve()
 
-        #     # Find intermediate solution q^(2)
-        #     self.q1.assign(0.75 * self.q0 + 0.25 * self.dq1)
-        #     self.psi_solver.solve()
-        #     self.q_solver.solve()
+            # Find intermediate solution q^(2)
+            self.q1.assign(0.75 * self.q0 + 0.25 * self.dq1)
+            self.psi_solver.solve()
+            self.q_solver.solve()
 
-        #     # Find new solution q^(n+1)
-        #     self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
+            # Find new solution q^(n+1)
+            self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
         X1[0].assign(self.q0) # save sol at the nstep th time 
 
     def controls(self):
@@ -141,16 +143,15 @@ class Euler_SD(base_model):
         
     #only for velocity
     def obs(self):
-        #self.run(self.X, self.X)
         self.q1.assign(self.q0)
         self.psi_solver.solve()
         u  = self.gradperp(self.psi0)
         #print(type(self.u[0]))
         Y_1 = Function(self.VVOM)
-        Y_2 = Function(self.VVOM)
-        Y_1.interpolate(self.X[0])
-        Y_2.interpolate(self.X[0])
-        return Y_1, Y_2
+        #Y_2 = Function(self.VVOM)
+        Y_1.interpolate(u[0])
+        #Y_2.interpolate(u[1])
+        return Y_1
 
 
     # memory allocation for PV
