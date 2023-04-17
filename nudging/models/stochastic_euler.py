@@ -169,7 +169,6 @@ class Euler_SD(base_model):
 
     # fix randomize
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
-        return
         rg = self.rg
         count = 0
         self.dXi = Function(self.V)
