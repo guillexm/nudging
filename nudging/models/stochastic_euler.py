@@ -115,7 +115,10 @@ class Euler_SD(base_model):
             self.X[i].assign(X0[i])
             
         self.q0.assign(self.X[0])
-        for step in range(0): #self.nsteps):
+        for step in range(self.nsteps):
+            self.dXi.assign(self.X[step+1])
+            self.dW_solver.solve()
+
             # Compute the streamfunction for the known value of q0
             self.q1.assign(self.q0)
             self.psi_solver.solve()
@@ -166,6 +169,7 @@ class Euler_SD(base_model):
 
     # fix randomize
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
+        return
         rg = self.rg
         count = 0
         self.dXi = Function(self.V)
