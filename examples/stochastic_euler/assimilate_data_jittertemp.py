@@ -33,7 +33,7 @@ u1_exact = np.load('u1_true_data.npy')
 u_vel_1 = np.load('u1_obs_data.npy') 
 #u_vel_2 = np.load('u2_obs_data.npy') 
 
-nensemble = [5,5,5,5,5]
+nensemble = [5,5,5,5]
 
 
 jtfilter.setup(nensemble, model)

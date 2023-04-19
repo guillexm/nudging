@@ -45,7 +45,7 @@ class Euler_SD(base_model):
         # Build the weak form for the inversion
         self.Apsi = (inner(grad(self.psi), grad(self.phi)) +  self.psi * self.phi) * dx
         Lpsi = -self.q1 * self.phi * dx
-        print(type(Lpsi), "type lpsi")
+        #print(type(Lpsi), "type lpsi")
 
         bc1 = DirichletBC(self.Vcg, 0.0, (1, 2))
 
@@ -70,7 +70,7 @@ class Euler_SD(base_model):
         bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary",))
         self.a_dW = inner(grad(self.dW), grad(self.dW_phi))*dx + self.dW*self.dW_phi*dx
         L_dW = self.dXi*self.dW_phi*dx
-        print(type(L_dW), "type L_dw")
+        #print(type(L_dW), "type L_dw")
         # Solve for noise 
         self.dW_n = Function(self.V)
         #make a solver 
@@ -91,7 +91,7 @@ class Euler_SD(base_model):
         #arhs = a_mass - self.dt*(a_int+ a_flux) 
         
         #a_mass = a_mass + a_noise
-        print(type(action(arhs, self.q1)), 'action')
+        #print(type(action(arhs, self.q1)), 'action')
         self.q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)
         self.q_solver = LinearVariationalSolver(self.q_prob,
                                    solver_parameters={"ksp_type": "preonly",
@@ -141,6 +141,7 @@ class Euler_SD(base_model):
     def controls(self):
         controls_list = []
         for i in range(len(self.X)):
+        #for i in range(1):
             controls_list.append(Control(self.X[i]))
         return controls_list
         
@@ -169,6 +170,7 @@ class Euler_SD(base_model):
 
     # fix randomize
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
+        #return
         rg = self.rg
         count = 0
         self.dXi = Function(self.V)
