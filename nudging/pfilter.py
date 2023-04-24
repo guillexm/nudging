@@ -273,13 +273,13 @@ class jittertemp_filter(base_filter):
                             self.model.run(self.ensemble[i],
                                            self.new_ensemble[i])
                             #set the controls
-                            PETSc.Sys.Print(type(y), 'type y')
+                            #PETSc.Sys.Print(type(y), 'type y')
                             if type(y) == Function:
                                 self.m = self.model.controls() + [Control(y)]
                             else:
                                 self.m = self.model.controls()
-                            PETSc.Sys.Print(len(self.m), 'type len control')
-                            PETSc.Sys.Print(len(self.ensemble[i]+[y]), 'type length')
+                            # PETSc.Sys.Print(len(self.m), 'type len control')
+                            # PETSc.Sys.Print(len(self.ensemble[i]+[y]), 'type length')
                             #requires log_likelihood to return symbolic
                             Y = self.model.obs()
                             self.MALA_J = assemble(log_likelihood(y,Y))
