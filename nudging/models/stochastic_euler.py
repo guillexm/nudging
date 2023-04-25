@@ -25,7 +25,7 @@ class Euler_SD(base_model):
         #FE spaces
         self.V = FunctionSpace(self.mesh, "CG", 1) #  noise term
         self.Vcg = FunctionSpace(self.mesh, "CG", 1) # Streamfunctions
-        self.Vdg = FunctionSpace(self.mesh, "DQ", 1) # potential velocity (PV)
+        self.Vdg = FunctionSpace(self.mesh, "DQ", 1) # potential vorticity (PV)
         self.q0 = Function(self.Vdg)
         self.q1 = Function(self.Vdg)
         self.Vu = FunctionSpace(self.mesh, "DQ", 0) # velocity
@@ -35,80 +35,77 @@ class Euler_SD(base_model):
         self.dq1 = Function(self.Vdg)  # PV fields for different time steps
         self.q1 = Function(self.Vdg)
        
-
-        # Define the weakfunction for stream 
+        ##################################  Bilinear form for Stream function ##########################################
+        # Define the weakfunction for stream functions
+        psi = TrialFunction(self.Vcg)  
+        phi = TestFunction(self.Vcg)
         self.psi0 = Function(self.Vcg) 
-        self.psi = TrialFunction(self.Vcg)  
-        self.phi = TestFunction(self.Vcg)
         
 
         # Build the weak form for the inversion
-        self.Apsi = (inner(grad(self.psi), grad(self.phi)) +  self.psi * self.phi) * dx
-        Lpsi = -self.q1 * self.phi * dx
-        #print(type(Lpsi), "type lpsi")
+        Apsi = (inner(grad(psi), grad(phi)) +  psi*phi) * dx
+        Lpsi = -self.q1 * phi * dx
 
         bc1 = DirichletBC(self.Vcg, 0.0, (1, 2))
 
-        self.psi_problem = LinearVariationalProblem(self.Apsi, Lpsi, self.psi0, bcs=bc1, constant_jacobian=True)
-        self.psi_solver = LinearVariationalSolver(self.psi_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
+        psi_problem = LinearVariationalProblem(Apsi, Lpsi, self.psi0, bcs=bc1, constant_jacobian=True)
+        self.psi_solver = LinearVariationalSolver(psi_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
 
-        # setup the second equation
+        ################################### Setup for  velocity #####################################################################
+
         self.gradperp = lambda u: as_vector((-u.dx(1), u.dx(0)))
         # upwinding terms
-        self.n_F = FacetNormal(self.mesh)
-        self.un = 0.5 * (dot(self.gradperp(self.psi0), self.n_F) + abs(dot(self.gradperp(self.psi0), self.n_F)))
+        n_F = FacetNormal(self.mesh)
+        un = 0.5 * (dot(self.gradperp(self.psi0), n_F) + abs(dot(self.gradperp(self.psi0), n_F)))
         
         
-        ##############################################################################################
-        # For noise variable
-        self.dW = TrialFunction(self.V)
-        self.dW_phi = TestFunction(self.V)
-        # Fix the white noise
-        self.dXi = Function(self.V)
-        self.dXi.assign(self.rg.normal(self.V, 0., 1))
-        # Bilinear form
-        bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary",))
-        self.a_dW = inner(grad(self.dW), grad(self.dW_phi))*dx + self.dW*self.dW_phi*dx
-        L_dW = self.dXi*self.dW_phi*dx
-        #print(type(L_dW), "type L_dw")
-        # Solve for noise 
+        #####################################   Bilinear form  for noise variable  ################################################
+        dW_phi = TestFunction(self.V)
+        dW = TrialFunction(self.V)
         self.dW_n = Function(self.V)
+        # Fix the right hand side white noise
+        self.dXi = Function(self.V)
+        #self.dXi.assign(self.rg.normal(self.V, 0., 1.0))
+
+        #### Define Bilinear form with Dirichlet BC 
+        bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary",))
+        a_dW = inner(grad(dW), grad(dW_phi))*dx + dW*dW_phi*dx
+        L_dW = self.dXi*dW_phi*dx
+
+        
         #make a solver 
-        self.dW_problem = LinearVariationalProblem(self.a_dW, L_dW, self.dW_n, bcs=bcs_dw)
-        self.dW_solver = LinearVariationalSolver(self.dW_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
-        ################################################################################################
+        dW_problem = LinearVariationalProblem(a_dW, L_dW, self.dW_n, bcs=bcs_dw)
+        self.dW_solver = LinearVariationalSolver(dW_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
 
-        #Bilinear form for PV 
+
+        #####################################   Bilinear form  for PV  ################################################
         
-        self.q = TrialFunction(self.Vdg)
-        self.p = TestFunction(self.Vdg)
+        q = TrialFunction(self.Vdg)
+        p = TestFunction(self.Vdg)
 
-        a_mass = self.p * self.q * dx
-        a_int = (dot(grad(self.p), -self.gradperp(self.psi0) * self.q) + beta * self.p * self.psi0.dx(0)) * dx
-        a_flux = (dot(jump(self.p), self.un("+") * self.q("+") - self.un("-") * self.q("-")))*dS
-        a_noise = self.p*self.dW_n *dx
+        a_mass = p*q*dx
+        a_int = (dot(grad(p), -self.gradperp(self.psi0) *q) + beta*p*self.psi0.dx(0)) * dx  # with stream function
+        a_flux = (dot(jump(p), un("+") * q("+") - un("-") * q("-")))*dS                          # with velocity
+        a_noise = p*self.dW_n *dx                                                                          # with noise term
         arhs = a_mass - self.dt*(a_int+ a_flux+a_noise) 
-        #arhs = a_mass - self.dt*(a_int+ a_flux) 
-        
-        #a_mass = a_mass + a_noise
+
         #print(type(action(arhs, self.q1)), 'action')
-        self.q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)
-        self.q_solver = LinearVariationalSolver(self.q_prob,
+        q_prob = LinearVariationalProblem(a_mass, action(arhs, self.q1), self.dq1)
+        self.q_solver = LinearVariationalSolver(q_prob,
                                    solver_parameters={"ksp_type": "preonly",
                                                       "pc_type": "bjacobi",
                                                       "sub_pc_type": "ilu"})
 
-        # state for controls
+        ############################################ state for controls  ###################################
         self.X = self.allocate()
 
-        # need modification w.r.t 2D
-        # vertex only mesh for observations  
-        x_point = np.linspace(0.0, 2.0*pi, self.n+1 )
-        y_point = np.linspace(0.0, 2.0*pi, self.n+1 )
+        ################################ Setup VVOM for vectorfunctionspace ###################################
+        x_point = np.linspace(0.0, self.Lx, self.n+1 )
+        y_point = np.linspace(0.0, self.Ly, self.n+1 )
         xv, yv  = np.meshgrid(x_point, y_point)
         x_obs_list = np.vstack([xv.ravel(), yv.ravel()]).T.tolist()
-        self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
-        self.VVOM = VectorFunctionSpace(self.VOM, "DG", 0)
+        VOM = VertexOnlyMesh(self.mesh, x_obs_list)
+        self.VVOM = VectorFunctionSpace(VOM, "DG", 0)
 
     def run(self, X0, X1):
         for i in range(len(X0)):
@@ -116,7 +113,8 @@ class Euler_SD(base_model):
             
         self.q0.assign(self.X[0])
         for step in range(self.nsteps):
-            self.dXi.assign(self.X[step+1])
+            #compute the noise term
+            self.dXi.assign(self.X[step+1]) # why this term ?
             self.dW_solver.solve()
 
             # Compute the streamfunction for the known value of q0
@@ -141,26 +139,19 @@ class Euler_SD(base_model):
     def controls(self):
         controls_list = []
         for i in range(len(self.X)):
-        #for i in range(1):
             controls_list.append(Control(self.X[i]))
         return controls_list
         
-    #only for velocity
+
     def obs(self):
         self.q1.assign(self.q0)
         self.psi_solver.solve()
         u  = self.gradperp(self.psi0)
-        #print(type(self.u[0]))
         Y = Function(self.VVOM)
         Y.interpolate(u)
-        #Y_1 = Function(self.VVOM)
-        #Y_2 = Function(self.VVOM)
-        #Y_1.interpolate(u[0])
-        #Y_2.interpolate(u[1])
         return Y
 
 
-    # memory allocation for PV
     def allocate(self):
         particle = [Function(self.Vdg)]
         for i in range(self.nsteps):
@@ -170,14 +161,11 @@ class Euler_SD(base_model):
 
 
 
-    # fix randomize
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
-        #return
         rg = self.rg
         count = 0
-        #self.dXi = Function(self.V)
         for i in range(self.nsteps):
-               self.dXi.assign(self.rg.normal(self.V, 0., 0.05))
+               self.dXi.assign(rg.normal(self.V, 0., 1.0))
                self.dW_solver.solve()
                count += 1
                X[count].assign(c1*X[count] + c2*self.dW_n)

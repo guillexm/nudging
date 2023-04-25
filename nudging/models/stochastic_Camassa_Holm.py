@@ -136,15 +136,6 @@ class Camsholm(base_model):
         return Y
 
 
-    # def call_simulated_obs(self):
-    #     m, u = self.w0.split()
-    #     Y = Function(self.VVOM)
-    #     Y.interpolate(u)
-    #     Z = Y.dat.data[:]
-    #     print(Z)
-    #     return Z
-
-
     def allocate(self):
         particle = [Function(self.W)]
         for i in range(self.nsteps):

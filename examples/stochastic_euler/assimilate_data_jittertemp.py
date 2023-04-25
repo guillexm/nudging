@@ -83,7 +83,6 @@ ushape = u_vel.shape
 if COMM_WORLD.rank == 0:
     u1_e = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
     u2_e = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
-    print(u1_e.shape)
 
 # do assimiliation step
 for k in range(N_obs):
