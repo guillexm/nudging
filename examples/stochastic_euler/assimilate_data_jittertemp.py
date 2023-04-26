@@ -20,7 +20,7 @@ n = 8
 nsteps = 5
 model = Euler_SD(n, nsteps=nsteps)
 
-MALA = False
+MALA = True
 verbose = True
 jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
                             verbose=verbose, MALA=MALA)
@@ -66,15 +66,23 @@ u_VOM = Function(model.VVOM)
 # prepare shared arrays for data
 u1_e_list = []
 u2_e_list = []
+u1_sim_list = []
+u2_sim_list = []
 
 for m in range(u_vel.shape[1]):        
     u1_e_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
     u2_e_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
+    u1_sim_shared = SharedArray(partition=nensemble, 
+                                 comm=jtfilter.subcommunicators.ensemble_comm)
+    u2_sim_shared = SharedArray(partition=nensemble, 
+                                 comm=jtfilter.subcommunicators.ensemble_comm)
   
     u1_e_list.append(u1_e_shared)
     u2_e_list.append(u2_e_shared)
+    u1_sim_list.append(u1_sim_shared)
+    u2_sim_list.append(u2_sim_shared)
   
 
 
@@ -82,6 +90,10 @@ ushape = u_vel.shape
 if COMM_WORLD.rank == 0:
     u1_e = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
     u2_e = np.zeros((np.sum(nensemble), ushape[0], ushape[1]))
+    u1_sim_obs_alltime_step = np.zeros((np.sum(nensemble), nsteps, ushape[1]))
+    u2_sim_obs_alltime_step = np.zeros((np.sum(nensemble), nsteps, ushape[1]))
+    u1_sim_obs_allobs_step = np.zeros((np.sum(nensemble), nsteps*ushape[0], ushape[1]))
+    u2_sim_obs_allobs_step = np.zeros((np.sum(nensemble), nsteps*ushape[0], ushape[1]))
 
 # do assimiliation step
 for k in range(N_obs):
@@ -89,7 +101,29 @@ for k in range(N_obs):
     u_VOM.dat.data[:,0] = u_vel[k,:,0]
     u_VOM.dat.data[:,1] = u_vel[k,:,1]
 
+
+    # print simulated data for velocity
+    for step in range(nsteps):
+        for i in range(nensemble[jtfilter.ensemble_rank]):
+            model.run(jtfilter.ensemble[i], jtfilter.ensemble[i])
+            fwd_simdata1 = model.obs().dat.data[:][:,0]
+            fwd_simdata2 = model.obs().dat.data[:][:,1]
+            for m in range(u_vel.shape[1]):
+                u1_sim_list[m].dlocal[i] = fwd_simdata1[m]
+                u2_sim_list[m].dlocal[i] = fwd_simdata2[m]
+        # store all timesteps values
+        for m in range(u_vel.shape[1]):
+            u1_sim_list[m].synchronise()
+            u2_sim_list[m].synchronise()
+            if COMM_WORLD.rank == 0:
+                u1_sim_obs_alltime_step[:, step, m] = u1_sim_list[m].data()
+                u1_sim_obs_allobs_step[:,nsteps*k+step,m] = u1_sim_obs_alltime_step[:, step, m]
+                u2_sim_obs_alltime_step[:, step, m] = u2_sim_list[m].data()
+                u2_sim_obs_allobs_step[:,nsteps*k+step,m] = u2_sim_obs_alltime_step[:, step, m]
+
     jtfilter.assimilation_step(u_VOM, log_likelihood)
+
+
     for i in range(nensemble[jtfilter.ensemble_rank]):
         model.q0.assign(jtfilter.ensemble[i][0])
         obsdata1 = model.obs().dat.data[:][:,0]
@@ -113,6 +147,10 @@ for k in range(N_obs):
 
 if COMM_WORLD.rank == 0:
     u_e = np.stack((u1_e,u2_e), axis = -1)
-    np.save("Velocity_ensemble_simulated_obs.npy", u_e)
+    u_sim_allobs_step = np.stack(( u1_sim_obs_allobs_step, u2_sim_obs_allobs_step), axis = -1)
+    print(u_e.shape)
+    print(u_sim_allobs_step.shape)
+    np.save("Velocity_ensemble.npy", u_e)
+    np.save("Velocity simualated_all_time.npy", u_sim_allobs_step)
 
 
