@@ -26,9 +26,11 @@ class Euler_SD(base_model):
         self.V = FunctionSpace(self.mesh, "CG", 1) #  noise term
         self.Vcg = FunctionSpace(self.mesh, "CG", 1) # Streamfunctions
         self.Vdg = FunctionSpace(self.mesh, "DQ", 1) # potential vorticity (PV)
+        self.Vu = FunctionSpace(self.mesh, "DQ", 0) # velocity
+        
         self.q0 = Function(self.Vdg)
         self.q1 = Function(self.Vdg)
-        self.Vu = FunctionSpace(self.mesh, "DQ", 0) # velocity
+        
         self.u0 = Function(self.Vu)
 
         # Define function to store the fields
@@ -65,12 +67,12 @@ class Euler_SD(base_model):
         self.dW_n = Function(self.V)
         # Fix the right hand side white noise
         self.dXi = Function(self.V)
-        #self.dXi.assign(self.rg.normal(self.V, 0., 1.0))
+        self.dXi.assign(self.rg.normal(self.V, 0., 1.0))
 
         #### Define Bilinear form with Dirichlet BC 
-        bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary",))
+        bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary"))
         a_dW = inner(grad(dW), grad(dW_phi))*dx + dW*dW_phi*dx
-        L_dW = self.dXi*dW_phi*dx
+        L_dW = self.dt*self.dXi*dW_phi*dx
 
         
         #make a solver 

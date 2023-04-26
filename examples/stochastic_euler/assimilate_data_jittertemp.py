@@ -20,14 +20,14 @@ n = 8
 nsteps = 5
 model = Euler_SD(n, nsteps=nsteps)
 
-MALA = True
+MALA = False
 verbose = True
 jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
                             verbose=verbose, MALA=MALA)
 
 # jtfilter = bootstrap_filter()
 
-# #Load data
+# Load data
 u_exact = np.load('u_true_data.npy')
 u_vel = np.load('u_obs_data.npy') 
 
@@ -40,7 +40,7 @@ x = SpatialCoordinate(model.mesh)
 
 #prepare the initial ensemble
 for i in range(nensemble[jtfilter.ensemble_rank]):
-    a = model.rg.uniform(model.R, 0., 1.0) # fixed a and b for local ensemble members
+    a = model.rg.uniform(model.R, 0., 1.0) 
     b = model.rg.uniform(model.R, 0., 1.0)
     q0_in = a*sin(8*pi*x[0])*sin(8*pi*x[1])+0.4*b*cos(6*pi*x[0])*cos(6*pi*x[1])\
                 +0.02*a*sin(2*pi*x[0])+0.02*a*sin(2*pi*x[1])+0.3*b*cos(10*pi*x[0])*cos(4*pi*x[1]) 
@@ -51,7 +51,6 @@ for i in range(nensemble[jtfilter.ensemble_rank]):
    
 
 def log_likelihood(y, Y):
-    #ll = 0.5*(1/0.05**2)*((y[:,0]-Y[:,0])**2 + (y[:,1]-Y[:,1])**2)*dx
     ll = (y-Y)**2/0.05**2/2*dx
     return ll
 
@@ -61,13 +60,13 @@ def log_likelihood(y, Y):
 N_obs = u_vel.shape[0]
 
 # VVOM Function
-u_VOM = Function(model.VVOM) # shape of (81,2)
+u_VOM = Function(model.VVOM) 
 
 
 # prepare shared arrays for data
 u1_e_list = []
 u2_e_list = []
-#u2_e_fwd_list = []
+
 for m in range(u_vel.shape[1]):        
     u1_e_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
@@ -89,7 +88,6 @@ for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
     u_VOM.dat.data[:,0] = u_vel[k,:,0]
     u_VOM.dat.data[:,1] = u_vel[k,:,1]
-    #u_VOM.dat.data[:][:,1] = u_vel[k, 81:]
 
     jtfilter.assimilation_step(u_VOM, log_likelihood)
     for i in range(nensemble[jtfilter.ensemble_rank]):
@@ -109,16 +107,12 @@ for k in range(N_obs):
         if COMM_WORLD.rank == 0:
             u1_e[:, k, m] = u1_e_list[m].data()
             u2_e[:, k, m] = u2_e_list[m].data()
-            #print(type(obsdata2), obsdata1.shape)
             
 
 #PETSc.Sys.Print("--- %s seconds ---" % (time.time() - start_time))
 
 if COMM_WORLD.rank == 0:
     u_e = np.stack((u1_e,u2_e), axis = -1)
-    print(u1_e.shape, u_e.shape)
-    #print(u1_e)
     np.save("Velocity_ensemble_simulated_obs.npy", u_e)
-    #np.save("Velocity_2_ensemble_simulated_obs.npy", u2_e)
 
 
