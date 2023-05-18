@@ -57,12 +57,9 @@ y_sim_obs_list = []
 for m in range(y.shape[1]):        
     y_e_shared = SharedArray(partition=nensemble, 
                                   comm=jtfilter.subcommunicators.ensemble_comm)
-    # y_e_asmfwd_shared = SharedArray(partition=nensemble, 
-    #                              comm=jtfilter.subcommunicators.ensemble_comm)
     y_sim_obs_shared = SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
     y_e_list.append(y_e_shared)
-    #y_e_asmfwd_list.append(y_e_asmfwd_shared)
     y_sim_obs_list.append(y_sim_obs_shared)
 
 ys = y.shape
@@ -71,18 +68,12 @@ if COMM_WORLD.rank == 0:
     y_e_asmfwd = np.zeros((np.sum(nensemble), ys[0], ys[1]))
     y_sim_obs_alltime_step = np.zeros((np.sum(nensemble),nsteps,  ys[1]))
     y_sim_obs_allobs_step = np.zeros((np.sum(nensemble),nsteps*N_obs,  ys[1]))
-    #print(np.shape(y_sim_obs_allobs_step))
-
 
 mylist = []
 def mycallback(ensemble):
    xpt = np.arange(0.5,40.0) # need to change the according to generate data
    X = ensemble[0]
    mylist.append(X.at(xpt))
-
-
-
-
 
 # do assimiliation step
 for k in range(N_obs):
@@ -119,14 +110,11 @@ for k in range(N_obs):
 
     for m in range(y.shape[1]):
         y_e_list[m].synchronise()
-        #y_e_asmfwd_list[m].synchronise()
         if COMM_WORLD.rank == 0:
             y_e[:, k, m] = y_e_list[m].data()
-            #y_e_asmfwd [:, k, m] = y_e_asmfwd_list[m].data()
 
 if COMM_WORLD.rank == 0:
     print("Time shape", y_sim_obs_alltime_step.shape)
-    #print("Time", y_sim_obs_alltime_step)
     print("Obs shape", y_sim_obs_allobs_step.shape)
     print("Ensemble member", y_e.shape)
     np.save("assimilated_ensemble.npy", y_e)
