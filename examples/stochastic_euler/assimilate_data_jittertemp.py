@@ -5,11 +5,6 @@ import matplotlib.pyplot as plt
 from firedrake.petsc import PETSc
 from pyadjoint import AdjFloat
 
-# import time
-# start_time = time.time()
-
-
-
 from nudging.models.stochastic_euler import Euler_SD
 
 """ read obs from saved file 
@@ -24,9 +19,6 @@ MALA = True
 verbose = True
 jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
                             verbose=verbose, MALA=MALA)
-
-# jtfilter = bootstrap_filter()
-
 # Load data
 u_exact = np.load('u_true_data.npy')
 u_vel = np.load('u_obs_data.npy') 

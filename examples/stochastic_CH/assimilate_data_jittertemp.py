@@ -19,8 +19,6 @@ verbose = True
 jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
                              verbose=verbose, MALA=MALA)
 
-#jtfilter = bootstrap_filter()
-
 nensemble = [5,5,5,5]
 jtfilter.setup(nensemble, model)
 
@@ -52,7 +50,6 @@ yVOM = Function(model.VVOM)
 
 # prepare shared arrays for data
 y_e_list = []
-#y_e_asmfwd_list = []
 y_sim_obs_list = []
 for m in range(y.shape[1]):        
     y_e_shared = SharedArray(partition=nensemble, 
