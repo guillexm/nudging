@@ -81,10 +81,18 @@ for k in range(N_obs):
     yVOM.dat.data[:] = y[k, :]
 
 
+    # make a copy so that we don't overwrite the initial condition
+    # in the next step
+    for i in  range(nensemble[jtfilter.ensemble_rank]):
+        jtfilter.new_ensemble[i].assign(jtfilter.ensemble[i])
+        model.randomize(jtfilter.new_ensemble[i])
+
+    # Compute simulated observations using "prior" distribution
+    # i.e. before we have used the observed data
     for step in range(nsteps):
         for i in  range(nensemble[jtfilter.ensemble_rank]):
-            #model.randomize(jtfilter.ensemble[i])
-            model.run(jtfilter.ensemble[i], jtfilter.ensemble[i])
+            model.run(jtfilter.new_ensemble[i], jtfilter.new_ensemble[i])
+            # note, not safe in spatial parallel
             fwd_simdata = model.obs().dat.data[:]
             for m in range(y.shape[1]):
                 y_sim_obs_list[m].dlocal[i] = fwd_simdata[m]
@@ -96,6 +104,7 @@ for k in range(N_obs):
                 y_sim_obs_alltime_step[:, step, m] = y_sim_obs_list[m].data()
                 y_sim_obs_allobs_step[:,nsteps*k+step,m] = y_sim_obs_alltime_step[:, step, m]                
 
+    # actually do the data assimilation step
     jtfilter.assimilation_step(yVOM, log_likelihood)
 
         
@@ -103,10 +112,7 @@ for k in range(N_obs):
         model.w0.assign(jtfilter.ensemble[i][0])
         obsdata = model.obs().dat.data[:]
         for m in range(y.shape[1]):
-            y_e_list[m].dlocal[i] = obsdata[m]
-
-
-    
+            y_e_list[m].dlocal[i] = obsdata[m]    
 
     for m in range(y.shape[1]):
         y_e_list[m].synchronise()
