@@ -84,7 +84,8 @@ for k in range(N_obs):
     # make a copy so that we don't overwrite the initial condition
     # in the next step
     for i in  range(nensemble[jtfilter.ensemble_rank]):
-        jtfilter.new_ensemble[i].assign(jtfilter.ensemble[i])
+        for p in range(len(jtfilter.new_ensemble[i])):
+            jtfilter.new_ensemble[i][p].assign(jtfilter.ensemble[i][p])
         model.randomize(jtfilter.new_ensemble[i])
 
     # Compute simulated observations using "prior" distribution
