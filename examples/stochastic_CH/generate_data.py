@@ -13,30 +13,29 @@ run model, get obseravation
 add observation noise N(0, sigma^2)
 """
 nsteps = 5
-model = Camsholm(100, nsteps)
+xpoints = 40
+model = Camsholm(100, nsteps, xpoints)
 model.setup()
 X_truth = model.allocate()
 _, u0 = X_truth[0].split()
 x, = SpatialCoordinate(model.mesh)
 u0.interpolate(0.2*2/(exp(x-403./15.) + exp(-x+403./15.)) + 0.5*2/(exp(x-203./15.)+exp(-x+203./15.)))
 
-N_obs = 5
+N_obs = 50
 
-y_true_VOM = model.obs()
-y_true = y_true_VOM.dat.data[:]
+y_true = model.obs().dat.data[:]
 y_obs_full = np.zeros((N_obs, np.size(y_true)))
 y_true_full = np.zeros((N_obs, np.size(y_true)))
 
 for i in range(N_obs):
     model.randomize(X_truth)
-    model.run(X_truth, X_truth)
-    y_true_VOM = model.obs()
-    y_true = y_true_VOM.dat.data[:]
+    model.run(X_truth, X_truth) # run method for every time step
+    y_true = model.obs().dat.data[:]
 
     y_true_full[i,:] = y_true
     y_true_data = np.save("y_true.npy", y_true_full)
 
-    y_noise = np.random.normal(0.0, 0.05, 40)  
+    y_noise = np.random.normal(0.0, 0.05, xpoints)  
 
     y_obs = y_true + y_noise
     
