@@ -95,17 +95,25 @@ if COMM_WORLD.rank == 0:
     u1_sim_obs_allobs_step = np.zeros((np.sum(nensemble), nsteps*ushape[0], ushape[1]))
     u2_sim_obs_allobs_step = np.zeros((np.sum(nensemble), nsteps*ushape[0], ushape[1]))
 
-# do assimiliation step
+# do assimiliation steps
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
+    # this won't work in space parallel
     u_VOM.dat.data[:,0] = u_vel[k,:,0]
     u_VOM.dat.data[:,1] = u_vel[k,:,1]
 
-
+    # make a copy so that we don't overwrite the initial condition
+    # in the next step
+    for i in  range(nensemble[jtfilter.ensemble_rank]):
+        for p in range(len(jtfilter.new_ensemble[i])):
+            jtfilter.new_ensemble[i][p].assign(jtfilter.ensemble[i][p])
+        model.randomize(jtfilter.new_ensemble[i])
+    
     # print simulated data for velocity
     for step in range(nsteps):
         for i in range(nensemble[jtfilter.ensemble_rank]):
-            model.run(jtfilter.ensemble[i], jtfilter.ensemble[i])
+            model.run(jtfilter.new_ensemble[i], jtfilter.new_ensemble[i])
+            #  this won't work in space parallel
             fwd_simdata1 = model.obs().dat.data[:][:,0]
             fwd_simdata2 = model.obs().dat.data[:][:,1]
             for m in range(u_vel.shape[1]):
@@ -123,9 +131,9 @@ for k in range(N_obs):
 
     jtfilter.assimilation_step(u_VOM, log_likelihood)
 
-
     for i in range(nensemble[jtfilter.ensemble_rank]):
         model.q0.assign(jtfilter.ensemble[i][0])
+        # this won't work in space parallel
         obsdata1 = model.obs().dat.data[:][:,0]
         obsdata2 = model.obs().dat.data[:][:,1]
         
@@ -142,9 +150,6 @@ for k in range(N_obs):
             u1_e[:, k, m] = u1_e_list[m].data()
             u2_e[:, k, m] = u2_e_list[m].data()
             
-
-#PETSc.Sys.Print("--- %s seconds ---" % (time.time() - start_time))
-
 if COMM_WORLD.rank == 0:
     u_e = np.stack((u1_e,u2_e), axis = -1)
     u_sim_allobs_step = np.stack(( u1_sim_obs_allobs_step, u2_sim_obs_allobs_step), axis = -1)
