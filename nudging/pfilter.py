@@ -185,13 +185,15 @@ class bootstrap_filter(base_filter):
 
 class jittertemp_filter(base_filter):
     def __init__(self, n_temp, n_jitt, rho,
-                 verbose=False, MALA=False, visualise_tape=False):
+                 verbose=False, MALA=False, nudging=False,
+                 visualise_tape=False):
         self.n_temp = n_temp
         self.n_jitt = n_jitt
         self.rho = rho
         self.verbose=verbose
         self.MALA = MALA
         self.model_taped = False
+        self.nudging = nudging
         self.visualise_tape = visualise_tape
 
     def setup(self, nensemble, model, resampler_seed=34343):
@@ -238,18 +240,80 @@ class jittertemp_filter(base_filter):
         new_weights = np.zeros(N)
         self.ess_temper = []
         self.theta_temper = []
+        nsteps = self.model.nsteps
 
-        theta = .0
-        while theta <1.: #  Tempering loop
-            dtheta = 1.0 - theta
-            # forward model step
+        # tape the forward model
+        if not self.model_taped:
+            self.model_taped = True
+            pyadjoint.tape.continue_annotation()
+            self.model.run(self.ensemble[0],
+                           self.new_ensemble[0])
+            #set the controls
+            if type(y == Function):
+                self.m = self.model.controls() + [Control(y)]
+            else:
+                self.m = self.model.controls()
+            #requires log_likelihood to return symbolic
+            Y = self.model.obs()
+            self.MALA_J = assemble(log_likelihood(y,Y))
+
+            if self.nudging:
+                self.nudge_J = assemble(log_likelihood(y,Y))
+                self.nudge_J += self.model.lambda_functional()
+                # set up the functionals
+                # functional for nudging
+                self.Jhat = []
+                components = []
+                for step in range(nsteps, nsteps*2+1):
+                    # 0 component is state
+                    # 1 .. step is noise
+                    # step + 1 .. 2*step is lambdas
+                    assert(self.model.lambdas)
+                    components.append(step)
+                    self.Jhat.append(ReducedFunctional(self.nudge_J,
+                                                       self.m,
+                                                       derivative_components=
+                                                       components))
+            # functional for MALA
+            components = [j for j in range(1, nsteps+1)]
+            self.Jhat_dW.append(ReducedFunctional(self.MALA_J,
+                                                  self.m,
+                                                  derivative_components=
+                                                  components))
+            if self.visualise_tape:
+                tape = pyadjoint.get_working_tape()
+                tape.visualise_pdf("t.pdf")
+            pyadjoint.tape.pause_annotation()
+
+        if nudging:
+            # zero the noise and lambdas in preparation for nudging
+            for i in range(N):
+                for step in range(nsteps):
+                    self.ensemble[i][step+1].assign(0.) # the noise
+                    self.ensemble[i][2*step+1].assign(0.) # the nudging
+                # nudging one step at a time
+                for step in range(nsteps):
+                    self.Jhat[step](self.ensemble[i])
+                    Xopt = minimize(self.Jhat[step])
+                    self.ensemble[i][nsteps+1+step].assign(Xopt[nsteps+1+step])
+                    self.model.randomize(Xopt) # not efficient!
+                    self.ensemble[i][step].assign(Xopt[step])
+        else:
             for i in range(N):
                 # generate the initial noise variables
                 self.model.randomize(self.ensemble[i])
-                # put result of forward model into new_ensemble
-                self.model.run(self.ensemble[i], self.new_ensemble[i])
-                Y = self.model.obs()
-                self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
+
+        # Compute initial weights
+        for i in range(N):
+            # put result of forward model into new_ensemble
+            self.model.run(self.ensemble[i], self.new_ensemble[i])
+            Y = self.model.obs()
+            self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
+            
+                
+        theta = .0
+        while theta <1.: #  Tempering loop
+            dtheta = 1.0 - theta
 
             # adaptive dtheta choice
             dtheta = self.adaptive_dtheta(dtheta, theta,  ess_tol)
@@ -268,29 +332,11 @@ class jittertemp_filter(base_filter):
                 # forward model step
                 for i in range(N):
                     if self.MALA:
-                        if not self.model_taped:
-                            self.model_taped = True
-                            pyadjoint.tape.continue_annotation()
-                            self.model.run(self.ensemble[i],
-                                           self.new_ensemble[i])
-                            #set the controls
-                            if type(y) == Function:
-                                self.m = self.model.controls() + [Control(y)]
-                            else:
-                                self.m = self.model.controls()
-                            #requires log_likelihood to return symbolic
-                            Y = self.model.obs()
-                            self.MALA_J = assemble(log_likelihood(y,Y))
-                            self.Jhat = ReducedFunctional(self.MALA_J, self.m)
-                            if self.visualise_tape:
-                                tape = pyadjoint.get_working_tape()
-                                tape.visualise_pdf("t.pdf")
-                            pyadjoint.tape.pause_annotation()
-
-                        # run the model and get the functional value with ensemble[i]
-                        self.Jhat(self.ensemble[i]+[y])
+                        # run the model and get the functional value with
+                        # ensemble[i]
+                        self.Jhat_dW(self.ensemble[i]+[y])
                         # use the taped model to get the derivative
-                        g = self.Jhat.derivative()
+                        g = self.Jhat_dW.derivative()
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
