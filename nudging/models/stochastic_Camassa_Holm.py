@@ -63,10 +63,10 @@ class Camsholm(base_model):
         self.noise_space = VectorFunctionSpace(self.mesh, "R", 0, dim=4)
         self.dW = Function(self.noise_space)
         self.Ln = (
-            self.fx1*self.dW1+
-            self.fx2*self.dW2+
-            self.fx3*self.dW3+
-            self.fx4*self.dW4
+            self.fx1*self.dW[0]+
+            self.fx2*self.dW[1]+
+            self.fx3*self.dW[2]+
+            self.fx4*self.dW[3]
             )
 
         # finite element linear functional 
