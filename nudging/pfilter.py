@@ -185,7 +185,8 @@ class bootstrap_filter(base_filter):
 
 class jittertemp_filter(base_filter):
     def __init__(self, n_temp, n_jitt, rho,
-                 verbose=False, MALA=False, nudging=False):
+                 verbose=False, MALA=False, nudging=False,
+                 visualise_tape=False):
         self.n_temp = n_temp
         self.n_jitt = n_jitt
         self.rho = rho
@@ -193,6 +194,7 @@ class jittertemp_filter(base_filter):
         self.MALA = MALA
         self.model_taped = False
         self.nudging = nudging
+        self.visualise_tape = visualise_tape
 
     def setup(self, nensemble, model, resampler_seed=34343):
         super(jittertemp_filter, self).setup(
@@ -278,6 +280,9 @@ class jittertemp_filter(base_filter):
                                                   self.m,
                                                   derivative_components=
                                                   components))
+            if self.visualise_tape:
+                tape = pyadjoint.get_working_tape()
+                tape.visualise_pdf("t.pdf")
             pyadjoint.tape.pause_annotation()
 
         if nudging:

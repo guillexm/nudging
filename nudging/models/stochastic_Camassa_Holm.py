@@ -6,16 +6,17 @@ from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
-    def __init__(self, n, nsteps, dt = 0.01, alpha=1.0, seed=12353):
+    def __init__(self, n, nsteps, xpoints, dt = 0.01, alpha=1.0, seed=12353):
 
         self.n = n
         self.nsteps = nsteps
         self.alpha = alpha
         self.dt = dt
         self.seed = seed
+        self.xpoints = xpoints
 
     def setup(self, comm = MPI.COMM_WORLD):
-        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel
+        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
         self.x, = SpatialCoordinate(self.mesh)
 
         #FE spaces
@@ -96,14 +97,15 @@ class Camsholm(base_model):
         self.X = self.allocate()
 
         # vertex only mesh for observations
-        x_obs = np.arange(0.5,40.0)
+        
+        x_obs = np.arange(0.5,self.xpoints)
         x_obs_list = []
         for i in x_obs:
             x_obs_list.append([i])
         self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
         self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
-    def run(self, X0, X1):
+    def run(self, X0, X1, operation = None):
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
         self.w0.assign(self.X[0])
@@ -116,8 +118,11 @@ class Camsholm(base_model):
 
             self.usolver.solve()
             self.w0.assign(self.w1)
+            if operation:
+               operation(self.w0)
         X1[0].assign(self.w0) # save sol at the nstep th time 
-
+        
+        
     def controls(self):
         controls_list = []
         for i in range(len(self.X)):
@@ -129,6 +134,7 @@ class Camsholm(base_model):
         Y = Function(self.VVOM)
         Y.interpolate(u)
         return Y
+
 
     def allocate(self):
         particle = [Function(self.W)]
