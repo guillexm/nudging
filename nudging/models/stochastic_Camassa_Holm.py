@@ -6,7 +6,8 @@ from nudging.model import *
 import numpy as np
 
 class Camsholm(base_model):
-    def __init__(self, n, nsteps, xpoints, dt = 0.01, alpha=1.0, seed=12353):
+    def __init__(self, n, nsteps, xpoints, lambdas=False,
+                 dt = 0.01, alpha=1.0, seed=12353):
 
         self.n = n
         self.nsteps = nsteps
@@ -14,6 +15,7 @@ class Camsholm(base_model):
         self.dt = dt
         self.seed = seed
         self.xpoints = xpoints
+        self.lambdas = lambdas # include lambdas in allocate
 
     def setup(self, comm = MPI.COMM_WORLD):
         self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
@@ -101,20 +103,34 @@ class Camsholm(base_model):
         self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
     def run(self, X0, X1, operation = None):
+        # copy input into model variables for taping
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
-        self.w0.assign(self.X[0])
-        self.msolve.solve()
-        for step in range(self.nsteps):
-            self.dW.assign(self.X[step+1]
 
+        # copy initial condition into model variable
+        self.w0.assign(self.X[0])
+
+        # ensure momentum and velocity are syncronised
+        self.msolve.solve()
+
+        # do the timestepping
+        for step in range(self.nsteps):
+            # get noise variables and lambdas
+            self.dW.assign(self.X[step+1])
+            if self.lambdas:
+                self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
+            # advance in time
             self.usolver.solve()
+            # copy output to input
             self.w0.assign(self.w1)
-            if operation:
-               operation(self.w0)
+
+        # enact callbacks
+        if operation:
+            operation(self.w0)
+
+        # return outputs
         X1[0].assign(self.w0) # save sol at the nstep th time 
-        
-        
+
     def controls(self):
         controls_list = []
         for i in range(len(self.X)):
@@ -127,14 +143,12 @@ class Camsholm(base_model):
         Y.interpolate(u)
         return Y
 
-
-    def allocate(self, noise=False, lambdas=False):
+    def allocate(self):
         particle = [Function(self.W)]
-        if noise:
-            for i in range(self.nsteps):
-                dW = self.rg.normal(self.noise_space, 0., 1.0)
-                particle.append(dW)
-        if lambdas:
+        for i in range(self.nsteps):
+            dW = self.rg.normal(self.noise_space, 0., 1.0)
+            particle.append(dW)
+        if self.lambdas:
             for i in range(self.nsteps):
                 dW = self.rg.normal(self.noise_space, 0., 1.0)
                 particle.append(dW)
@@ -143,6 +157,7 @@ class Camsholm(base_model):
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
+        assert(self.noise)
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(self.noise_space, 0., 1.0))
