@@ -49,9 +49,9 @@ class base_filter(object, metaclass=ABCMeta):
         # some numbers for shared array and owned array
         self.nlocal = self.nensemble[self.ensemble_rank]
         self.nglobal = int(np.sum(self.nensemble))
-            
-        # Shared array for the weights
-        self.weight_arr = SharedArray(partition=self.nensemble, dtype=float,
+
+        # Shared array for the potentials
+        self.potential_arr = SharedArray(partition=self.nensemble, dtype=float,
                                       comm=self.subcommunicators.ensemble_comm)
         # Owned array for the resampling protocol
         self.s_arr = OwnedArray(size = self.nglobal, dtype=int,
@@ -77,11 +77,11 @@ class base_filter(object, metaclass=ABCMeta):
         
     def parallel_resample(self, dtheta=1):
         
-        self.weight_arr.synchronise(root=0)
+        self.potential_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
-            weights = self.weight_arr.data()
+            potentials = self.potential_arr.data()
             # renormalise
-            weights = np.exp(-dtheta*weights)
+            weights = np.exp(-dtheta*potentials)
             weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
 
@@ -167,7 +167,7 @@ class sim_filter(base_filter):
             self.ensemble[i].assign(self.offset_list[self.ensemble_rank]+i)
 
             Y = self.model.obs()
-            self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
+            self.potential_arr.dlocal[i] = assemble(log_likelihood(y,Y))
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
@@ -179,26 +179,29 @@ class bootstrap_filter(base_filter):
             self.model.run(self.ensemble[i], self.ensemble[i])   
 
             Y = self.model.obs()
-            self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
+            self.potential_arr.dlocal[i] = assemble(log_likelihood(y,Y))
         self.parallel_resample()
 
 
 class jittertemp_filter(base_filter):
-    def __init__(self, n_temp, n_jitt, rho,
+    def __init__(self, n_temp, n_jitt, delta=None,
                  verbose=False, MALA=False, nudging=False,
                  visualise_tape=False):
         self.n_temp = n_temp
         self.n_jitt = n_jitt
-        self.rho = rho
+        self.delta = delta
         self.verbose=verbose
         self.MALA = MALA
         self.model_taped = False
         self.nudging = nudging
         self.visualise_tape = visualise_tape
 
+        if MALA:
+           PETSc.Sys.Print("Warning, we are not currently computing the Metropolis correction for MALA. Choose a small delta.")
+
     def setup(self, nensemble, model, resampler_seed=34343):
         super(jittertemp_filter, self).setup(
-            nensemble, model, resampler_seed=34343)
+            nensemble, model, resampler_seed=resampler_seed)
         # Owned array for sending dtheta
         self.dtheta_arr = OwnedArray(size = self.nglobal, dtype=float,
                                      comm=self.subcommunicators.ensemble_comm,
@@ -211,13 +214,14 @@ class jittertemp_filter(base_filter):
         ess_list = []
         esstheta_list = []
         ttheta = 0
-        self.weight_arr.synchronise(root=0)
+        self.potential_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
-            logweights = self.weight_arr.data()
+            potentials = self.potential_arr.data()
             ess =0.
             while ess < ess_tol*sum(self.nensemble):
                 # renormalise using dtheta
-                weights = np.exp(-dtheta*logweights)
+                potentials -= potentials.max()
+                weights = np.exp(-dtheta*potentials)
                 weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
                 if ess < ess_tol*sum(self.nensemble):
@@ -236,8 +240,8 @@ class jittertemp_filter(base_filter):
         
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
-        weights = np.zeros(N)
-        new_weights = np.zeros(N)
+        potentials = np.zeros(N)
+        new_potentials = np.zeros(N)
         self.ess_temper = []
         self.theta_temper = []
         nsteps = self.model.nsteps
@@ -286,31 +290,36 @@ class jittertemp_filter(base_filter):
             pyadjoint.tape.pause_annotation()
 
         if nudging:
-            # zero the noise and lambdas in preparation for nudging
             for i in range(N):
+                # zero the noise and lambdas in preparation for nudging
                 for step in range(nsteps):
                     self.ensemble[i][step+1].assign(0.) # the noise
-                    self.ensemble[i][2*step+1].assign(0.) # the nudging
+                    self.ensemble[i][nsteps+step+1].assign(0.) # the nudging
                 # nudging one step at a time
                 for step in range(nsteps):
+                    # update with current noise and lambda values
                     self.Jhat[step](self.ensemble[i])
+                    # get the minimum over current lambda
                     Xopt = minimize(self.Jhat[step])
-                    self.ensemble[i][nsteps+1+step].assign(Xopt[nsteps+1+step])
+                    # place the optimal value of lambda into ensemble
+                    self.ensemble[i][nsteps+1+step].assign(
+                        Xopt[nsteps+1+step])
+                    # get the randomised noise for this step
                     self.model.randomize(Xopt) # not efficient!
-                    self.ensemble[i][step].assign(Xopt[step])
+                    # just copy in the current component
+                    self.ensemble[i][1+step].assign(Xopt[1+step])
         else:
             for i in range(N):
                 # generate the initial noise variables
                 self.model.randomize(self.ensemble[i])
 
-        # Compute initial weights
+        # Compute initial potentials
         for i in range(N):
             # put result of forward model into new_ensemble
             self.model.run(self.ensemble[i], self.new_ensemble[i])
             Y = self.model.obs()
-            self.weight_arr.dlocal[i] = assemble(log_likelihood(y,Y))
-            
-                
+            self.potential_arr.dlocal[i] = assemble(log_likelihood(y,Y))
+
         theta = .0
         while theta <1.: #  Tempering loop
             dtheta = 1.0 - theta
@@ -340,37 +349,45 @@ class jittertemp_filter(base_filter):
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
+                        delta = self.delta
                         self.model.randomize(self.proposal_ensemble[i],
-                                             Constant((2-self.rho)/(2+self.rho)),
-                                             Constant((8*self.rho)**0.5/(2+self.rho)),
-                                             gscale=Constant(-2*self.rho/(2+self.rho)),g=g)
+                                             Constant(
+                                                 (2-delta)/(2+delta)),
+                                             Constant(
+                                                 (8*delta)**0.5/(2+delta)),
+                                             gscale=Constant(
+                                                 -2*delta/(2+delta)),g=g)
                     else:
                         # proposal PCN
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
+                        delta = self.delta
                         self.model.randomize(self.proposal_ensemble[i],
-                                             self.rho,
-                                             (1-self.rho**2)**0.5)
+                                             (2-delta)/(2+delta),
+                                             (8*delta)**0.5/(2+delta))
                     # put result of forward model into new_ensemble
                     self.model.run(self.proposal_ensemble[i],
                                    self.new_ensemble[i])
 
-                    # particle weights
+                    # particle potentials
                     Y = self.model.obs()
-                    new_weights[i] = exp(-theta*assemble(log_likelihood(y,Y)))
+                    new_potentials[i] = exp(-theta*assemble(
+                        log_likelihood(y,Y)))
                     #accept reject of MALA and Jittering 
                     if l == 0:
-                        weights[i] = new_weights[i]
+                        potentials[i] = new_potentials[i]
                     else:
                         # Metropolis MCMC
                         if self.MALA:
                             p_accept = 1
                         else:
-                            p_accept = min(1, new_weights[i]/weights[i])
+                            p_accept = min(1,
+                                           exp(new_potentials[i]
+                                               - potentials[i]))
                         # accept or reject tool
                         u = self.model.rg.uniform(self.model.R, 0., 1.0)
                         if u.dat.data[:] < p_accept:
-                            weights[i] = new_weights[i]
+                            potentials[i] = new_potentials[i]
                             self.model.copy(self.proposal_ensemble[i],
                                             self.ensemble[i])
 
