@@ -26,7 +26,9 @@ class Camsholm(base_model):
         self.W = MixedFunctionSpace((self.V, self.V))
         self.w0 = Function(self.W)
         self.m0, self.u0 = self.w0.split()       
-
+        One = Function(self.V).assign(1.0)
+        self.Area = assemble(One*dx)
+        
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
@@ -160,6 +162,24 @@ class Camsholm(base_model):
         assert(self.noise)
         for i in range(self.nsteps):
             count += 1
-            X[count].assign(c1*X[count] + c2*rg.normal(self.noise_space, 0., 1.0))
+            X[count].assign(c1*X[count] + c2*rg.normal(
+                self.noise_space, 0., 1.0))
             if g:
                 X[count] += gscale*g[count]
+
+    def lambda_functional(self):
+        nsteps = self.nsteps
+        dt = self.dt
+
+        for step in range(nsteps):
+            lambda_step = self.X[nsteps + 1 + step]
+            dW_step = self.X[1 + step]
+            dlfunc = assemble(lambda_step**2*dt/2*dx
+                              - lambda_step*dW_step*dt**0.5*dx)
+            dlfunc /= Area
+            if step == 0:
+                lfunc = dlfunc
+            else:
+                lfunc += dlfunc
+
+        return lfunc
