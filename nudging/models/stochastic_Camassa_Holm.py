@@ -20,13 +20,13 @@ class Camsholm(base_model):
         self.lambdas = lambdas # include lambdas in allocate
 
     def setup(self, comm = MPI.COMM_WORLD):
-        mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
+        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
         x, = SpatialCoordinate(self.mesh)
 
         #FE spaces
         V = FunctionSpace(self.mesh, "CG", 1)
-        W = MixedFunctionSpace((V, V))
-        self.w0 = Function(W)
+        self.W = MixedFunctionSpace((V, V))
+        self.w0 = Function(self.W)
         m0, u0 = self.w0.split()       
         One = Function(V).assign(1.0)
         Area = assemble(One*dx)
@@ -34,7 +34,7 @@ class Camsholm(base_model):
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
-        alphasq = alpha**2
+        alphasq = self.alpha**2
         p = TestFunction(V)
         m = TrialFunction(V)
         
@@ -47,12 +47,12 @@ class Camsholm(base_model):
         
         #Build the weak form of the timestepping algorithm. 
 
-        p, q = TestFunctions(W)
+        p, q = TestFunctions(self.W)
 
-        w1 = Function(W)
+        self.w1 = Function(self.W)
         self.w1.assign(self.w0)
-        m1, u1 = split(w1)   # for n+1 the  time
-        m0, u0 = split(w0)   # for n th time 
+        m1, u1 = split(self.w1)   # for n+1 the  time
+        m0, u0 = split(self.w0)   # for n th time 
         
         #Adding extra term included random number
         fx = []
@@ -64,13 +64,13 @@ class Camsholm(base_model):
             fx[i].interpolate(0.1*sin((i+1)*pi*x/8.))
 
         # with added term
-        R = Function(mesh, "R", 0)
+        R = FunctionSpace(self.mesh, "R", 0)
         self.noise_space = reduce(mul, (R for _ in range(self.n_noise_cpts)))
 
         self.dW = Function(self.noise_space)
-        Ln = fx[0]*dW.sub(0)
+        Ln = fx[0]*self.dW.sub(0)
         for i in range(1, self.n_noise_cpts):
-            Ln += fx[i]*dW.sub(i)
+            Ln += fx[i]*self.dW.sub(i)
 
         # finite element linear functional 
         Dt = Constant(self.dt)
