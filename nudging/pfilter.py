@@ -255,19 +255,19 @@ class jittertemp_filter(base_filter):
                            self.new_ensemble[0])
             #set the controls
             if type(y == Function):
-                self.m = self.model.controls() + [Control(y)]
+                m = self.model.controls() + [Control(y)]
             else:
-                self.m = self.model.controls()
+                m = self.model.controls()
             #requires log_likelihood to return symbolic
             Y = self.model.obs()
-            self.MALA_J = assemble(log_likelihood(y,Y))
+            MALA_J = assemble(log_likelihood(y,Y))
 
             if self.nudging:
-                self.nudge_J = assemble(log_likelihood(y,Y))
-                self.nudge_J += self.model.lambda_functional()
+                nudge_J = assemble(log_likelihood(y,Y))
+                nudge_J += self.model.lambda_functional()
                 # set up the functionals
                 # functional for nudging
-                self.Jhat = []
+                Jhat = []
                 components = []
                 for step in range(nsteps, nsteps*2+1):
                     # 0 component is state
@@ -275,14 +275,14 @@ class jittertemp_filter(base_filter):
                     # step + 1 .. 2*step is lambdas
                     assert(self.model.lambdas)
                     components.append(step)
-                    self.Jhat.append(ReducedFunctional(self.nudge_J,
-                                                       self.m,
+                    Jhat.append(ReducedFunctional(nudge_J,
+                                                       m,
                                                        derivative_components=
                                                        components))
             # functional for MALA
             components = [j for j in range(1, nsteps+1)]
-            self.Jhat_dW = ReducedFunctional(self.MALA_J,
-                                                  self.m,
+            Jhat_dW = ReducedFunctional(MALA_J,
+                                                  m,
                                                   derivative_components=
                                                   components)
             if self.visualise_tape:
@@ -301,12 +301,12 @@ class jittertemp_filter(base_filter):
                 # nudging one step at a time
                 for step in range(nsteps):
                     # update with current noise and lambda values
-                    self.Jhat[step](self.ensemble[i]+[y])
+                    Jhat[step](self.ensemble[i]+[y])
                     # get the minimum over current lambda
                     if self.verbose:
                         PETSc.Sys.Print("Solving for Lambda step ", step,
                                         "local ensemble member ", i)
-                    Xopt = minimize(self.Jhat[step])
+                    Xopt = minimize(Jhat[step])
                     # place the optimal value of lambda into ensemble
                     self.ensemble[i][nsteps+1+step].assign(
                         Xopt[nsteps+1+step])
@@ -349,9 +349,9 @@ class jittertemp_filter(base_filter):
                     if self.MALA:
                         # run the model and get the functional value with
                         # ensemble[i]
-                        self.Jhat_dW(self.ensemble[i]+[y])
+                        Jhat_dW(self.ensemble[i]+[y])
                         # use the taped model to get the derivative
-                        g = self.Jhat_dW.derivative()
+                        g = Jhat_dW.derivative()
                         # proposal
                         self.model.copy(self.ensemble[i],
                                         self.proposal_ensemble[i])
