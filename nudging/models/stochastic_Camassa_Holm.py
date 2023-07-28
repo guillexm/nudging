@@ -4,6 +4,8 @@ from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from nudging.model import *
 import numpy as np
+from operator import mul
+from functools import reduce
 
 class Camsholm(base_model):
     def __init__(self, n, nsteps, xpoints, lambdas=False,
@@ -18,79 +20,74 @@ class Camsholm(base_model):
         self.lambdas = lambdas # include lambdas in allocate
 
     def setup(self, comm = MPI.COMM_WORLD):
-        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
-        self.x, = SpatialCoordinate(self.mesh)
+        mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
+        x, = SpatialCoordinate(self.mesh)
 
         #FE spaces
-        self.V = FunctionSpace(self.mesh, "CG", 1)
-        self.W = MixedFunctionSpace((self.V, self.V))
-        self.w0 = Function(self.W)
-        self.m0, self.u0 = self.w0.split()       
-        One = Function(self.V).assign(1.0)
-        self.Area = assemble(One*dx)
+        V = FunctionSpace(self.mesh, "CG", 1)
+        W = MixedFunctionSpace((V, V))
+        self.w0 = Function(W)
+        m0, u0 = self.w0.split()       
+        One = Function(V).assign(1.0)
+        Area = assemble(One*dx)
         
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
-        alphasq = self.alpha**2
-        self.p = TestFunction(self.V)
-        self.m = TrialFunction(self.V)
+        alphasq = alpha**2
+        p = TestFunction(V)
+        m = TrialFunction(V)
         
-        self.am = self.p*self.m*dx
-        self.Lm = (self.p*self.u0 + alphasq*self.p.dx(0)*self.u0.dx(0))*dx
-        mprob = LinearVariationalProblem(self.am, self.Lm, self.m0)
+        am = p*m*dx
+        Lm = (p*u0 + alphasq*p.dx(0)*u0.dx(0))*dx
+        mprob = LinearVariationalProblem(am, Lm, m0)
         solver_parameters={'ksp_type': 'preonly', 'pc_type': 'lu'}
         self.msolve = LinearVariationalSolver(mprob,
                                               solver_parameters=solver_parameters)
         
         #Build the weak form of the timestepping algorithm. 
 
-        self.p, self.q = TestFunctions(self.W)
+        p, q = TestFunctions(W)
 
-        self.w1 = Function(self.W)
+        w1 = Function(W)
         self.w1.assign(self.w0)
-        self.m1, self.u1 = split(self.w1)   # for n+1 the  time
-        self.m0, self.u0 = split(self.w0)   # for n th time 
+        m1, u1 = split(w1)   # for n+1 the  time
+        m0, u0 = split(w0)   # for n th time 
         
         #Adding extra term included random number
-        self.fx1 = Function(self.V)
-        self.fx2 = Function(self.V)
-        self.fx3 = Function(self.V)
-        self.fx4 = Function(self.V)
+        fx = []
+        self.n_noise_cpts = 4
+        for i in range(self.n_noise_cpts):
+            fx.append(Function(V))
 
-        self.fx1.interpolate(0.1*sin(pi*self.x/8.))
-        self.fx2.interpolate(0.1*sin(2.*pi*self.x/8.))
-        self.fx3.interpolate(0.1*sin(3.*pi*self.x/8.))
-        self.fx4.interpolate(0.1*sin(4.*pi*self.x/8.))
+        for i in range(self.n_noise_cpts):
+            fx[i].interpolate(0.1*sin((i+1)*pi*x/8.))
 
         # with added term
-        self.noise_space = VectorFunctionSpace(self.mesh, "R", 0, dim=4)
+        R = Function(mesh, "R", 0)
+        self.noise_space = reduce(mul, (R for _ in range(self.n_noise_cpts)))
+
         self.dW = Function(self.noise_space)
-        self.Ln = (
-            self.fx1*self.dW[0]+
-            self.fx2*self.dW[1]+
-            self.fx3*self.dW[2]+
-            self.fx4*self.dW[3]
-            )
+        Ln = fx[0]*dW.sub(0)
+        for i in range(1, self.n_noise_cpts):
+            Ln += fx[i]*dW.sub(i)
 
         # finite element linear functional 
         Dt = Constant(self.dt)
-        self.mh = 0.5*(self.m1 + self.m0)
-        self.uh = 0.5*(self.u1 + self.u0)
-        self.v = self.uh*Dt+self.Ln*Dt**0.5
+        mh = 0.5*(m1 + m0)
+        uh = 0.5*(u1 + u0)
+        v = uh*Dt+Ln*Dt**0.5
 
-        self.L = ((self.q*self.u1 + alphasq*self.q.dx(0)*self.u1.dx(0) - self.q*self.m1)*dx +(self.p*(self.m1-self.m0) + (self.p*self.v.dx(0)*self.mh -self.p.dx(0)*self.v*self.mh))*dx)
+        L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx +
+             (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh))*dx)
 
-        #def Linearfunc
-
-        # solver
-
-        self.uprob = NonlinearVariationalProblem(self.L, self.w1)
-        self.usolver = NonlinearVariationalSolver(self.uprob, solver_parameters={'mat_type': 'aij', 'ksp_type': 'preonly','pc_type': 'lu'})
+        # timestepping solver
+        uprob = NonlinearVariationalProblem(L, self.w1)
+        self.usolver = NonlinearVariationalSolver(uprob, solver_parameters={'mat_type': 'aij', 'ksp_type': 'preonly','pc_type': 'lu'})
 
         # Data save
-        self.m0, self.u0 = self.w0.split()
-        self.m1, self.u1 = self.w1.split()
+        m0, u0 = self.w0.split()
+        m1, u1 = self.w1.split()
 
         # state for controls
         self.X = self.allocate()
@@ -107,6 +104,7 @@ class Camsholm(base_model):
     def run(self, X0, X1, operation = None):
         # copy input into model variables for taping
         for i in range(len(X0)):
+            self.X[i].assign(self.X[i])
             self.X[i].assign(X0[i])
 
         # copy initial condition into model variable
@@ -159,7 +157,6 @@ class Camsholm(base_model):
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
-        assert(self.noise)
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(
@@ -174,10 +171,13 @@ class Camsholm(base_model):
         for step in range(nsteps):
             lambda_step = self.X[nsteps + 1 + step]
             dW_step = self.X[1 + step]
-            dlfunc = assemble(lambda_step**2*dt/2*dx
-                              - lambda_step*dW_step*dt**0.5*dx)
-            dlfunc /= Area
-            if step == 0:
+            for cpt in self.n_noise_cpts:
+                dlfunc = assemble(
+                    lambda_step.sub(cpt)**2*dt/2*dx
+                    - lambda_step.sub(cpt)*dW_step.sub(cpt)*dt**0.5*dx
+            )
+            dlfunc /= self.Area
+            if step == 0 and cpt == 0:
                 lfunc = dlfunc
             else:
                 lfunc += dlfunc

@@ -184,11 +184,9 @@ class bootstrap_filter(base_filter):
 
 
 class jittertemp_filter(base_filter):
-    def __init__(self, n_temp, n_jitt, delta=None,
+    def __init__(self, n_jitt=1, delta=None,
                  verbose=False, MALA=False, nudging=False,
                  visualise_tape=False):
-        self.n_temp = n_temp
-        self.n_jitt = n_jitt
         self.delta = delta
         self.verbose=verbose
         self.MALA = MALA
@@ -248,6 +246,8 @@ class jittertemp_filter(base_filter):
 
         # tape the forward model
         if not self.model_taped:
+            if self.verbose:
+                PETSc.Sys.Print("taping forward model")
             self.model_taped = True
             pyadjoint.tape.continue_annotation()
             self.model.run(self.ensemble[0],
@@ -280,16 +280,18 @@ class jittertemp_filter(base_filter):
                                                        components))
             # functional for MALA
             components = [j for j in range(1, nsteps+1)]
-            self.Jhat_dW.append(ReducedFunctional(self.MALA_J,
+            self.Jhat_dW = ReducedFunctional(self.MALA_J,
                                                   self.m,
                                                   derivative_components=
-                                                  components))
+                                                  components)
             if self.visualise_tape:
                 tape = pyadjoint.get_working_tape()
                 tape.visualise_pdf("t.pdf")
             pyadjoint.tape.pause_annotation()
 
-        if nudging:
+        if self.nudging:
+            if self.verbose:
+                PETSc.Sys.Print("Starting nudging")
             for i in range(N):
                 # zero the noise and lambdas in preparation for nudging
                 for step in range(nsteps):
@@ -298,8 +300,10 @@ class jittertemp_filter(base_filter):
                 # nudging one step at a time
                 for step in range(nsteps):
                     # update with current noise and lambda values
-                    self.Jhat[step](self.ensemble[i])
+                    self.Jhat[step](self.ensemble[i]+[y])
                     # get the minimum over current lambda
+                    if self.verbose:
+                        PETSc.Sys.Print("Solving for Lambda step ", step)
                     Xopt = minimize(self.Jhat[step])
                     # place the optimal value of lambda into ensemble
                     self.ensemble[i][nsteps+1+step].assign(
