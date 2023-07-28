@@ -29,7 +29,7 @@ class Camsholm(base_model):
         self.w0 = Function(self.W)
         m0, u0 = self.w0.split()       
         One = Function(V).assign(1.0)
-        Area = assemble(One*dx)
+        self.Area = assemble(One*dx)
         
         #Interpolate the initial condition
 
@@ -171,15 +171,14 @@ class Camsholm(base_model):
         for step in range(nsteps):
             lambda_step = self.X[nsteps + 1 + step]
             dW_step = self.X[1 + step]
-            for cpt in self.n_noise_cpts:
+            for cpt in range(self.n_noise_cpts):
                 dlfunc = assemble(
                     lambda_step.sub(cpt)**2*dt/2*dx
                     - lambda_step.sub(cpt)*dW_step.sub(cpt)*dt**0.5*dx
-            )
-            dlfunc /= self.Area
-            if step == 0 and cpt == 0:
-                lfunc = dlfunc
-            else:
-                lfunc += dlfunc
-
+                )
+                dlfunc /= self.Area
+                if step == 0 and cpt == 0:
+                    lfunc = dlfunc
+                else:
+                    lfunc += dlfunc
         return lfunc

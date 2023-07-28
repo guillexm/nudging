@@ -193,6 +193,7 @@ class jittertemp_filter(base_filter):
         self.model_taped = False
         self.nudging = nudging
         self.visualise_tape = visualise_tape
+        self.n_jitt = n_jitt
 
         if MALA:
            PETSc.Sys.Print("Warning, we are not currently computing the Metropolis correction for MALA. Choose a small delta.")
@@ -303,7 +304,8 @@ class jittertemp_filter(base_filter):
                     self.Jhat[step](self.ensemble[i]+[y])
                     # get the minimum over current lambda
                     if self.verbose:
-                        PETSc.Sys.Print("Solving for Lambda step ", step)
+                        PETSc.Sys.Print("Solving for Lambda step ", step,
+                                        "local ensemble member ", i)
                     Xopt = minimize(self.Jhat[step])
                     # place the optimal value of lambda into ensemble
                     self.ensemble[i][nsteps+1+step].assign(
