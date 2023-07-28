@@ -81,9 +81,12 @@ class base_filter(object, metaclass=ABCMeta):
         if self.ensemble_rank == 0:
             potentials = self.potential_arr.data()
             # renormalise
+            potentials -= np.mean(potentials)
             weights = np.exp(-dtheta*potentials)
             weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
+            if self.verbose:
+                PETSc.Sys.Print("ESS", self.ess)
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
@@ -236,7 +239,6 @@ class jittertemp_filter(base_filter):
         theta += dtheta
         return dtheta
 
-        
     def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
         potentials = np.zeros(N)
@@ -275,16 +277,15 @@ class jittertemp_filter(base_filter):
                     # step + 1 .. 2*step is lambdas
                     assert(self.model.lambdas)
                     components.append(step)
-                    Jhat.append(ReducedFunctional(nudge_J,
-                                                       m,
-                                                       derivative_components=
-                                                       components))
+
+                    Jhat.append(ReducedFunctional(nudge_J, m,
+                                                  derivative_components=
+                                                  components))
             # functional for MALA
             components = [j for j in range(1, nsteps+1)]
-            Jhat_dW = ReducedFunctional(MALA_J,
-                                                  m,
-                                                  derivative_components=
-                                                  components)
+            Jhat_dW = ReducedFunctional(MALA_J, m,
+                                        derivative_components=
+                                        components)
             if self.visualise_tape:
                 tape = pyadjoint.get_working_tape()
                 tape.visualise_pdf("t.pdf")
@@ -306,6 +307,7 @@ class jittertemp_filter(base_filter):
                     if self.verbose:
                         PETSc.Sys.Print("Solving for Lambda step ", step,
                                         "local ensemble member ", i)
+                    Jhat[step].derivative()
                     Xopt = minimize(Jhat[step])
                     # place the optimal value of lambda into ensemble
                     self.ensemble[i][nsteps+1+step].assign(
@@ -338,12 +340,12 @@ class jittertemp_filter(base_filter):
                 PETSc.Sys.Print("theta", theta, "dtheta", dtheta)
 
             # resampling BEFORE jittering
-            self.parallel_resample()
+            self.parallel_resample(dtheta)
 
             for l in range(self.n_jitt): # Jittering loop
                 if self.verbose:
-                    PETSc.Sys.Print("Jitter, Temper step", l, k)
-                    
+                    PETSc.Sys.Print("Jitter, Temper step", l)
+
                 # forward model step
                 for i in range(N):
                     if self.MALA:
@@ -357,11 +359,11 @@ class jittertemp_filter(base_filter):
                                         self.proposal_ensemble[i])
                         delta = self.delta
                         self.model.randomize(self.proposal_ensemble[i],
-                                             Constant(
+                                             (
                                                  (2-delta)/(2+delta)),
-                                             Constant(
+                                             (
                                                  (8*delta)**0.5/(2+delta)),
-                                             gscale=Constant(
+                                             gscale=(
                                                  -2*delta/(2+delta)),g=g)
                     else:
                         # proposal PCN

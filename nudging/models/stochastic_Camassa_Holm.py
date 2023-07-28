@@ -37,18 +37,17 @@ class Camsholm(base_model):
         alphasq = self.alpha**2
         p = TestFunction(V)
         m = TrialFunction(V)
-        
+
         am = p*m*dx
         Lm = (p*u0 + alphasq*p.dx(0)*u0.dx(0))*dx
         mprob = LinearVariationalProblem(am, Lm, m0)
-        solver_parameters={'ksp_type': 'preonly', 'pc_type': 'lu'}
+        sp={'ksp_type': 'preonly', 'pc_type': 'lu'}
         self.msolve = LinearVariationalSolver(mprob,
-                                              solver_parameters=solver_parameters)
-        
+                                              solver_parameters=sp)
+
         #Build the weak form of the timestepping algorithm. 
 
         p, q = TestFunctions(self.W)
-
         self.w1 = Function(self.W)
         self.w1.assign(self.w0)
         m1, u1 = split(self.w1)   # for n+1 the  time
@@ -58,8 +57,7 @@ class Camsholm(base_model):
         fx = []
         self.n_noise_cpts = 4
         for i in range(self.n_noise_cpts):
-            fx.append(Function(V))
-
+            fx.append(Function(V, name="f"+str(i)))
         for i in range(self.n_noise_cpts):
             fx[i].interpolate(0.1*sin((i+1)*pi*x/8.))
 
@@ -67,13 +65,14 @@ class Camsholm(base_model):
         R = FunctionSpace(self.mesh, "R", 0)
         self.noise_space = reduce(mul, (R for _ in range(self.n_noise_cpts)))
 
-        self.dW = Function(self.noise_space)
-        Ln = fx[0]*self.dW.sub(0)
+        self.dW = Function(self.noise_space, name='dW in model')
+        dWs = split(self.dW)
+        Ln = fx[0]*dWs[0]
         for i in range(1, self.n_noise_cpts):
-            Ln += fx[i]*self.dW.sub(i)
+            Ln += fx[i]*dWs[i]
 
         # finite element linear functional 
-        Dt = Constant(self.dt)
+        Dt = self.dt
         mh = 0.5*(m1 + m0)
         uh = 0.5*(u1 + u0)
         v = uh*Dt+Ln*Dt**0.5
@@ -83,11 +82,8 @@ class Camsholm(base_model):
 
         # timestepping solver
         uprob = NonlinearVariationalProblem(L, self.w1)
-        self.usolver = NonlinearVariationalSolver(uprob, solver_parameters={'mat_type': 'aij', 'ksp_type': 'preonly','pc_type': 'lu'})
-
-        # Data save
-        m0, u0 = self.w0.split()
-        m1, u1 = self.w1.split()
+        self.usolver = NonlinearVariationalSolver(uprob,
+                                                  solver_parameters={'mat_type': 'aij', 'ksp_type': 'preonly','pc_type': 'lu'})
 
         # state for controls
         self.X = self.allocate()
@@ -104,7 +100,6 @@ class Camsholm(base_model):
     def run(self, X0, X1, operation = None):
         # copy input into model variables for taping
         for i in range(len(X0)):
-            self.X[i].assign(self.X[i])
             self.X[i].assign(X0[i])
 
         # copy initial condition into model variable
