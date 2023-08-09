@@ -211,11 +211,6 @@ class jittertemp_filter(base_filter):
 
     def adaptive_dtheta(self, dtheta, theta, ess_tol):
         N = self.nensemble[self.ensemble_rank]
-        dtheta_list = []
-        ttheta_list = []
-        ess_list = []
-        esstheta_list = []
-        ttheta = 0
         self.potential_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             potentials = self.potential_arr.data()
@@ -271,7 +266,7 @@ class jittertemp_filter(base_filter):
                 # functional for nudging
                 self.Jhat = []
                 components = []
-                for step in range(nsteps, nsteps*2+1):
+                for step in range(nsteps+1, nsteps*2+1):
                     # 0 component is state
                     # 1 .. step is noise
                     # step + 1 .. 2*step is lambdas
