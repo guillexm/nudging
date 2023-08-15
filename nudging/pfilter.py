@@ -265,13 +265,13 @@ class jittertemp_filter(base_filter):
                 # set up the functionals
                 # functional for nudging
                 self.Jhat = []
-                components = []
                 for step in range(nsteps+1, nsteps*2+1):
                     # 0 component is state
                     # 1 .. step is noise
                     # step + 1 .. 2*step is lambdas
                     assert(self.model.lambdas)
-                    components.append(step)
+                    # we only update lambdas[step] on timestep step
+                    components = [step]
 
                     self.Jhat.append(ReducedFunctional(nudge_J, m,
                                                   derivative_components=
