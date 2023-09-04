@@ -9,11 +9,12 @@ from functools import reduce
 
 class Camsholm(base_model):
     def __init__(self, n, nsteps, xpoints, lambdas=False,
-                 dt = 0.01, alpha=1.0, seed=12353):
+                 dt = 0.025, alpha=1.0, mu=0.01,  seed=12353):
 
         self.n = n
         self.nsteps = nsteps
         self.alpha = alpha
+        self.mu = mu
         self.dt = dt
         self.seed = seed
         self.xpoints = xpoints
@@ -78,7 +79,7 @@ class Camsholm(base_model):
         v = uh*Dt+Ln*Dt**0.5
 
         L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx +
-             (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh))*dx)
+             (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0))*dx)
 
         # timestepping solver
         uprob = NonlinearVariationalProblem(L, self.w1)
@@ -89,7 +90,7 @@ class Camsholm(base_model):
         self.X = self.allocate()
 
         # vertex only mesh for observations
-        
+        #x_obs =np.linspace(0, 40,num=self.xpoints, endpoint=False) # This is better choice
         x_obs = np.arange(0.5,self.xpoints)
         x_obs_list = []
         for i in x_obs:
@@ -119,7 +120,7 @@ class Camsholm(base_model):
             # copy output to input
             self.w0.assign(self.w1)
 
-        # enact callbacks
+        # exact callbacks
         if operation:
             operation(self.w0)
 
