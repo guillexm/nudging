@@ -57,19 +57,19 @@ class Camsholm(base_model):
 
 
         #Setup noise term using Matern formula
-        W_F = FunctionSpace(self.mesh, "DG", 0) 
-        self.dw = Function(W_F) 
-        alpha_w = CellVolume(self.mesh)
-        dphi = TestFunction(V)
-        du = TrialFunction(V)
+        # W_F = FunctionSpace(self.mesh, "DG", 0) 
+        # self.dw = Function(W_F) 
+        # alpha_w = CellVolume(self.mesh)
+        # dphi = TestFunction(V)
+        # du = TrialFunction(V)
         
-        self.du = Function(V)
-        kappa_isq = 0.01
-        a_w = (dphi*du + kappa_isq*dphi*dx(0)*du.dx(0))*dx
-        L_w = alpha_w*dphi*self.dw*dx
-        w_prob = LinearVariationalProblem(a_w, L_w, self.du)
-        self.wsolve = LinearVariationalSolver(w_prob,
-                                              solver_parameters=sp)     
+        # self.du = Function(V)
+        # kappa_isq = 0.01
+        # a_w = (dphi*du + kappa_isq*dphi*dx(0)*du.dx(0))*dx
+        # L_w = alpha_w*dphi*self.dw*dx
+        # w_prob = LinearVariationalProblem(a_w, L_w, self.du)
+        # self.wsolve = LinearVariationalSolver(w_prob,
+        #                                       solver_parameters=sp)     
         
         #Adding extra term included random number
         fx = []
@@ -143,6 +143,39 @@ class Camsholm(base_model):
 
         # return outputs
         X1[0].assign(self.w0) # save sol at the nstep th time 
+
+    # not efficient but works need to replace in future
+    def forcast_data_allstep(self, X0):
+        # copy input into model variables for taping
+        for i in range(len(X0)):
+            self.X[i].assign(X0[i])
+
+        # copy initial condition into model variable
+        self.w0.assign(self.X[0])
+
+        # ensure momentum and velocity are syncronised
+        self.msolve.solve()
+
+        # do the timestepping
+        # save time steps 
+        w0_list = []
+        for step in range(self.nsteps):
+            # get noise variables and lambdas
+            self.dW.assign(self.X[step+1])
+            if self.lambdas:
+                self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
+            # advance in time
+            self.usolver.solve()
+            # copy output to input
+            self.w0.assign(self.w1)
+            m, u = self.w0.split()
+            Y = Function(self.VVOM)
+            Y.interpolate(u)
+            w0_list.append(Y.dat.data[:])
+        # return outputs
+        return w0_list # save sol at the nstep th time 
+
+
 
     def controls(self):
         controls_list = []
