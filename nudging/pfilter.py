@@ -5,6 +5,7 @@ from pyop2.mpi import MPI
 from .resampling import *
 import numpy as np
 import pyadjoint
+import gc
 from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
 from firedrake_adjoint import *
 pyadjoint.tape.pause_annotation()
@@ -85,8 +86,9 @@ class base_filter(object, metaclass=ABCMeta):
             weights = np.exp(-dtheta*potentials)
             weights /= np.sum(weights)
             self.ess = 1/np.sum(weights**2)
-            if self.verbose:
-                PETSc.Sys.Print("ESS", self.ess)
+            PETSc.Sys.Print("ESS", self.ess)
+            # if self.verbose:
+            #     PETSc.Sys.Print("ESS", self.ess)
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
@@ -221,6 +223,7 @@ class jittertemp_filter(base_filter):
                 weights = np.exp(-dtheta*potentials)
                 weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
+                #PETSc.Sys.Print('ESS, Dtheta', ess, dtheta)
                 if ess < ess_tol*sum(self.nensemble):
                     dtheta = 0.5*dtheta
 
@@ -234,7 +237,7 @@ class jittertemp_filter(base_filter):
         theta += dtheta
         return dtheta
 
-    def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
+    def assimilation_step(self, y, log_likelihood, ess_tol=0.0):
         N = self.nensemble[self.ensemble_rank]
         potentials = np.zeros(N)
         new_potentials = np.zeros(N)
@@ -296,6 +299,7 @@ class jittertemp_filter(base_filter):
                     self.ensemble[i][nsteps+step+1].assign(0.) # the nudging
                 # nudging one step at a time
                 for step in range(nsteps):
+                    PETSc.garbage_cleanup(PETSc.COMM_SELF)
                     # update with current noise and lambda values
                     self.Jhat[step](self.ensemble[i]+[y])
                     # get the minimum over current lambda
@@ -303,7 +307,11 @@ class jittertemp_filter(base_filter):
                         PETSc.Sys.Print("Solving for Lambda step ", step,
                                         "local ensemble member ", i)
                     self.Jhat[step].derivative()
-                    Xopt = minimize(self.Jhat[step])
+                    if i ==0:
+                        Xopt = minimize(self.Jhat[step], options={"disp": True})
+                    else:
+                        Xopt = minimize(self.Jhat[step])
+                    
                     # place the optimal value of lambda into ensemble
                     self.ensemble[i][nsteps+1+step].assign(
                         Xopt[nsteps+1+step])
@@ -399,3 +407,5 @@ class jittertemp_filter(base_filter):
         self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
             PETSc.Sys.Print("assimilation step complete")
+        # momeory leak fix trick   
+        PETSc.garbage_cleanup(PETSc.COMM_SELF)
