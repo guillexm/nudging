@@ -27,13 +27,6 @@ class base_model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def data_store(self, X0):
-        """
-        store soln at all time steps
-        """
-    pass
-
-    @abstractmethod
     def obs(self):
         """
         Observation operator
