@@ -3,6 +3,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from functools import cached_property
 from firedrake import *
 from nudging import *
+from firedrake.petsc import PETSc
 
 class residual_resampling(object):
     def __init__(self, seed=34523):
@@ -28,25 +29,15 @@ class residual_resampling(object):
             self.R = FunctionSpace(model.mesh, "R", 0)
         
         N = weights.size
-        copies = np.array(np.floor(weights*N), dtype=int) 
-        L = N - np.sum(copies)
-        residual_weights = N*weights - copies
-        residual_weights /= np.sum(residual_weights)
-        
-        for i in range(L):
-            u = self.rg.uniform(self.R, 0., 1.0)
-            u0 =  u.dat.data[:]
-
-            cs = np.cumsum(residual_weights)
-            istar = -1
-            while cs[istar+1] < u0:
-                istar += 1
-            copies[istar] += 1
-
-        count = 0
+        cumsum_weight = np.cumsum(weights)
+        ensembl_pos = (self.rg.random() + np.arange(N))/N
         s = np.zeros(N, dtype=int)
-        for i in range(N):
-            for j in range(copies[i]):
-                s[count] = i
-                count += 1     
+        i, j = 0, 0
+        while i < N:
+            if ensembl_pos[i] < cumsum_weight[j]:
+                s[i] = j
+                i += 1
+            else:
+                j +=1
         return s
+        
