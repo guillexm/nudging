@@ -115,7 +115,7 @@ class Camsholm(base_model):
         self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
         self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
-    def run(self, X0, X1, operation = None):
+    def run(self, X0, X1, diagonastic = False):
         # copy input into model variables for taping
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
@@ -137,9 +137,9 @@ class Camsholm(base_model):
             # copy output to input
             self.w0.assign(self.w1)
 
-        # exact callbacks
-        if operation:
-            operation(self.w0)
+            #exact callbacks
+            if diagonastic:
+                self.data_store(self.w0)
 
         # return outputs
         X1[0].assign(self.w0) # save sol at the nstep th time 
