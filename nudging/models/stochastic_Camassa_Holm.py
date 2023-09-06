@@ -54,6 +54,23 @@ class Camsholm(base_model):
         m1, u1 = split(self.w1)   # for n+1 the  time
         m0, u0 = split(self.w0)   # for n th time 
         
+
+
+        #Setup noise term using Matern formula
+        W_F = FunctionSpace(self.mesh, "DG", 0) 
+        self.dw = Function(W_F) 
+        alpha_w = CellVolume(self.mesh)
+        dphi = TestFunction(V)
+        du = TrialFunction(V)
+        
+        self.du = Function(V)
+        kappa_isq = 0.01
+        a_w = (dphi*du + kappa_isq*dphi*dx(0)*du.dx(0))*dx
+        L_w = alpha_w*dphi*self.dw*dx
+        w_prob = LinearVariationalProblem(a_w, L_w, self.du)
+        self.wsolve = LinearVariationalSolver(w_prob,
+                                              solver_parameters=sp)     
+        
         #Adding extra term included random number
         fx = []
         self.n_noise_cpts = 4
