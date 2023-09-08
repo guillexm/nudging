@@ -199,30 +199,14 @@ class Camsholm(base_model):
     def lambda_functional(self):
         nsteps = self.nsteps
         dt = self.dt
-
         for step in range(nsteps):
             lambda_step = self.X[nsteps + 1 + step]
             dW_step = self.X[1 + step]
             
-            dlfunc = assemble(lambda_step**2*dt/2*dx
-                - lambda_step*dW_step*dt**0.5*dx)
-            dlfunc /= self.Area
+            dlfunc = assemble((1/self.alpha_w)*lambda_step**2*dt/2*dx
+                - (1/self.alpha_w)*lambda_step*dW_step*dt**0.5*dx)
             if step == 0:
                 lfunc = dlfunc
             else:
                 lfunc += dlfunc
-
-        # for step in range(nsteps):
-        #     lambda_step = self.X[nsteps + 1 + step]
-        #     dW_step = self.X[1 + step]
-        #     for cpt in range(self.n_noise_cpts):
-        #         dlfunc = assemble(
-        #             lambda_step.sub(cpt)**2*dt/2*dx
-        #             - lambda_step.sub(cpt)*dW_step.sub(cpt)*dt**0.5*dx
-        #         )
-        #         dlfunc /= self.Area
-        #         if step == 0 and cpt == 0:
-        #             lfunc = dlfunc
-        #         else:
-        #             lfunc += dlfunc
         return lfunc
