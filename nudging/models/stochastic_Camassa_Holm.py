@@ -54,46 +54,28 @@ class Camsholm(base_model):
         m1, u1 = split(self.w1)   # for n+1 the  time
         m0, u0 = split(self.w0)   # for n th time 
         
-
+        self.R = FunctionSpace(self.mesh, "R", 0)
 
         #Setup noise term using Matern formula
-        # W_F = FunctionSpace(self.mesh, "DG", 0) 
-        # self.dw = Function(W_F) 
-        # alpha_w = CellVolume(self.mesh)
-        # dphi = TestFunction(V)
-        # du = TrialFunction(V)
+        self.W_F = FunctionSpace(self.mesh, "DG", 0) 
+        self.dW = Function(self.W_F) 
+        self.alpha_w = CellVolume(self.mesh)
+        dphi = TestFunction(V)
+        du = TrialFunction(V)
         
-        # self.du = Function(V)
-        # kappa_isq = 0.01
-        # a_w = (dphi*du + kappa_isq*dphi*dx(0)*du.dx(0))*dx
-        # L_w = alpha_w*dphi*self.dw*dx
-        # w_prob = LinearVariationalProblem(a_w, L_w, self.du)
-        # self.wsolve = LinearVariationalSolver(w_prob,
-        #                                       solver_parameters=sp)     
+        self.dU = Function(V)
+        kappa_isq = 0.01
+        a_w = (dphi*du + kappa_isq*dphi.dx(0)*du.dx(0))*dx
+        L_w = self.alpha_w*dphi*self.dW*dx
+        w_prob = LinearVariationalProblem(a_w, L_w, self.dU)
+        self.wsolver = LinearVariationalSolver(w_prob,
+                                              solver_parameters=sp)     
         
-        #Adding extra term included random number
-        fx = []
-        self.n_noise_cpts = 4
-        for i in range(self.n_noise_cpts):
-            fx.append(Function(V, name="f"+str(i)))
-        for i in range(self.n_noise_cpts):
-            fx[i].interpolate(0.1*sin((i+1)*pi*x/8.))
-
-        # with added term
-        R = FunctionSpace(self.mesh, "R", 0)
-        self.noise_space = reduce(mul, (R for _ in range(self.n_noise_cpts)))
-
-        self.dW = Function(self.noise_space, name='dW in model')
-        dWs = split(self.dW)
-        Ln = fx[0]*dWs[0]
-        for i in range(1, self.n_noise_cpts):
-            Ln += fx[i]*dWs[i]
-
-        # finite element linear functional 
+        #finite element linear functional 
         Dt = self.dt
         mh = 0.5*(m1 + m0)
         uh = 0.5*(u1 + u0)
-        v = uh*Dt+Ln*Dt**0.5
+        v = uh*Dt+self.dU*Dt**0.5
 
         L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx +
              (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0))*dx)
@@ -132,6 +114,8 @@ class Camsholm(base_model):
             self.dW.assign(self.X[step+1])
             if self.lambdas:
                 self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
+            # solve  dW --> dU
+            self.wsolver.solve()
             # advance in time
             self.usolver.solve()
             # copy output to input
@@ -164,6 +148,8 @@ class Camsholm(base_model):
             self.dW.assign(self.X[step+1])
             if self.lambdas:
                 self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
+            # solve  dW --> dU
+            self.wsolver.solve()
             # advance in time
             self.usolver.solve()
             # copy output to input
@@ -192,11 +178,11 @@ class Camsholm(base_model):
     def allocate(self):
         particle = [Function(self.W)]
         for i in range(self.nsteps):
-            dW = self.rg.normal(self.noise_space, 0., 1.0)
+            dW = Function(self.W_F)
             particle.append(dW)
         if self.lambdas:
             for i in range(self.nsteps):
-                dW = self.rg.normal(self.noise_space, 0., 1.0)
+                dW = Function(self.W_F)
                 particle.append(dW)
         return particle
 
@@ -206,7 +192,7 @@ class Camsholm(base_model):
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(
-                self.noise_space, 0., 1.0))
+                self.W_F, 0., 1.0))
             if g:
                 X[count] += gscale*g[count]
 
@@ -217,14 +203,26 @@ class Camsholm(base_model):
         for step in range(nsteps):
             lambda_step = self.X[nsteps + 1 + step]
             dW_step = self.X[1 + step]
-            for cpt in range(self.n_noise_cpts):
-                dlfunc = assemble(
-                    lambda_step.sub(cpt)**2*dt/2*dx
-                    - lambda_step.sub(cpt)*dW_step.sub(cpt)*dt**0.5*dx
-                )
-                dlfunc /= self.Area
-                if step == 0 and cpt == 0:
-                    lfunc = dlfunc
-                else:
-                    lfunc += dlfunc
+            
+            dlfunc = assemble(lambda_step**2*dt/2*dx
+                - lambda_step*dW_step*dt**0.5*dx)
+            dlfunc /= self.Area
+            if step == 0:
+                lfunc = dlfunc
+            else:
+                lfunc += dlfunc
+
+        # for step in range(nsteps):
+        #     lambda_step = self.X[nsteps + 1 + step]
+        #     dW_step = self.X[1 + step]
+        #     for cpt in range(self.n_noise_cpts):
+        #         dlfunc = assemble(
+        #             lambda_step.sub(cpt)**2*dt/2*dx
+        #             - lambda_step.sub(cpt)*dW_step.sub(cpt)*dt**0.5*dx
+        #         )
+        #         dlfunc /= self.Area
+        #         if step == 0 and cpt == 0:
+        #             lfunc = dlfunc
+        #         else:
+        #             lfunc += dlfunc
         return lfunc
