@@ -54,7 +54,6 @@ class Camsholm(base_model):
         m1, u1 = split(self.w1)   # for n+1 the  time
         m0, u0 = split(self.w0)   # for n th time 
         
-        self.R = FunctionSpace(self.mesh, "R", 0)
 
         #Setup noise term using Matern formula
         self.W_F = FunctionSpace(self.mesh, "DG", 0) 
