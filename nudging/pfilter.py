@@ -399,3 +399,46 @@ class jittertemp_filter(base_filter):
         self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
             PETSc.Sys.Print("assimilation step complete")
+
+class MCMC_sampler(base_filter):
+    def __init__(self, delta):
+        self.delta = delta
+
+    def assimilation_step(self, y, log_likelihood, n_its, functions):
+        '''
+        functions - a list of Python functions that take in ensemble state
+        and return a number
+        '''
+        N = self.nensemble[self.ensemble_rank]
+        potentials = np.zeros(N, dtype=float64)
+        new_potentials = np.zeros(N, dtype=float64)
+        statistics = np.zeros((N, n_its, functions)), dtype=float64)
+        for it in range(n_its):
+            for i in range(N):
+                # requires the model to randomize the state for an initial
+                # ensemble as well as the noise
+                self.model.randomize(self.proposal_ensemble[i],
+                                     (2-delta)/(2+delta),
+                                     (8*delta)**0.5/(2+delta),
+                                     state=True)
+                self.model.run(self.proposal_ensemble[i], self.new_ensemble[i])
+                Y = self.model.obs()
+                LL1[i] = assemble(log_likelihood(y,Y))
+                if it>0:
+                    # compute acceptance probability
+                    p_accept = min(1,
+                                   exp(LL1[i] - LL0[i]))
+                    u = self.model.rg.uniform(self.model.R, 0., 1.0)
+                    if u.dat.data[:] < p_accept:
+                        potentials[i] = new_potentials[i]
+                        self.model.copy(self.proposal_ensemble[i],
+                                        self.ensemble[i])
+                else:
+                    LL0 = LL1
+                    self.model.copy(self.ensemble[i],
+                                    self.proposal_ensemble[i])
+                # compute statistics
+                for stat in range(len(functions)):
+                    statistics[i, it, stat] = functions[stat](self.ensemble(i))
+            
+        return statistics

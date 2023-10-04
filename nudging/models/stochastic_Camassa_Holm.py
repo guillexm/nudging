@@ -150,9 +150,11 @@ class Camsholm(base_model):
                 particle.append(dW)
         return particle
 
-    def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
+    def randomize(self, X, c1=0, c2=1, gscale=None, g=None, state=False):
         rg = self.rg
         count = 0
+        if state:
+            do something
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(
