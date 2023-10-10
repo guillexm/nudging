@@ -401,44 +401,60 @@ class jittertemp_filter(base_filter):
             PETSc.Sys.Print("assimilation step complete")
 
 class MCMC_sampler(base_filter):
-    def __init__(self, delta):
+    def __init__(self, delta, n_mcmc):
         self.delta = delta
+        self.n_mcmc = n_mcmc
 
-    def assimilation_step(self, y, log_likelihood, n_its, functions):
+    # def monitor_dist_int(self, n_mcmc):
+
+    
+
+    def assimilation_step(self, y, log_likelihood, monitor_dist_int):
         '''
         functions - a list of Python functions that take in ensemble state
         and return a number
         '''
         N = self.nensemble[self.ensemble_rank]
-        potentials = np.zeros(N, dtype=float64)
-        new_potentials = np.zeros(N, dtype=float64)
-        statistics = np.zeros((N, n_its, functions)), dtype=float64)
+        n_its = self.n_mcmc
+        LL0 = np.zeros(N) # initlize LL0 and LL1
+        LL1 = np.zeros(N)
+        #statistics = np.zeros((n_its, functions), dtype=np.float64)
+        statistics = np.zeros((n_its), dtype=np.float64)
         for it in range(n_its):
             for i in range(N):
                 # requires the model to randomize the state for an initial
                 # ensemble as well as the noise
+                delta = self.delta
                 self.model.randomize(self.proposal_ensemble[i],
                                      (2-delta)/(2+delta),
                                      (8*delta)**0.5/(2+delta),
                                      state=True)
                 self.model.run(self.proposal_ensemble[i], self.new_ensemble[i])
                 Y = self.model.obs()
-                LL1[i] = assemble(log_likelihood(y,Y))
+                LL1[i] = exp(-assemble(log_likelihood(y,Y)))
                 if it>0:
                     # compute acceptance probability
                     p_accept = min(1,
                                    exp(LL1[i] - LL0[i]))
                     u = self.model.rg.uniform(self.model.R, 0., 1.0)
                     if u.dat.data[:] < p_accept:
-                        potentials[i] = new_potentials[i]
+                        LL0[i] = LL1[i]
                         self.model.copy(self.proposal_ensemble[i],
                                         self.ensemble[i])
                 else:
-                    LL0 = LL1
+                    LL0[i] = LL1[i]
                     self.model.copy(self.ensemble[i],
                                     self.proposal_ensemble[i])
+                # if it ==0:
+                #     self.model.copy(self.proposal_ensemble[i], self.inmcmc_ensemble[i])
+                # if it ==  n_its-1:
+                #     self.model.copy(self.proposal_ensemble[i], self.finmcmc_ensemble[i])
+                #monitor_dist_int(n_its,self.proposal_ensemble[i][0])[0] += monitor_dist_int(n_its,self.proposal_ensemble[i][0])[0]
+                #monitor_dist_int(n_its,self.proposal_ensemble[i][0])[1] += monitor_dist_int(n_its,self.proposal_ensemble[i][0])[1]
                 # compute statistics
-                for stat in range(len(functions)):
-                    statistics[i, it, stat] = functions[stat](self.ensemble(i))
-            
+                #for stat in range(len(functions)):
+                #statistics[it, stat] = functions[stat](self.ensemble(i)) # like monitoring step and autocorrelation
+            statistics[it] =  assemble(monitor_dist_int(n_its,self.proposal_ensemble[i][0])[0])/2* assemble(monitor_dist_int(n_its,self.proposal_ensemble[i][0])[1])
+            #statistics[it] = assemble(monitor_dist_int(n_its,Y)[0])
+                
         return statistics

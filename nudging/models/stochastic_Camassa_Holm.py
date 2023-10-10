@@ -153,8 +153,19 @@ class Camsholm(base_model):
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None, state=False):
         rg = self.rg
         count = 0
+        #  state with initial distribution
         if state:
-            do something
+            x, = SpatialCoordinate(self.mesh)
+            dx0 = self.rg.normal(self.R, 0., 1.05)
+            dx1 = self.rg.normal(self.R, 0., 1.05)
+            a = self.rg.uniform(self.R, 0., 1.0)
+            b = self.rg.uniform(self.R, 0., 1.0)
+            u0_exp = (1+a)*0.2*2/(exp(x-403./15. - dx0) + exp(-x+403./15. + dx0)) \
+                    + (1+b)*0.5*2/(exp(x-203./15. - dx1)+exp(-x+203./15. + dx1))
+    
+            _, u = X[0].split()
+            u.interpolate(u0_exp)
+
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(
