@@ -4,9 +4,11 @@ from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
 from nudging.model import *
 import numpy as np
+from operator import mul
+from functools import reduce
 
 class Euler_SD(base_model):
-    def __init__(self, n, nsteps, dt = 0.01, seed=12353):
+    def __init__(self, n, nsteps, dt = 0.1, seed=12353):
 
         self.n = n
         self.nsteps = nsteps
@@ -15,15 +17,16 @@ class Euler_SD(base_model):
 
     def setup(self, comm = MPI.COMM_WORLD):
 
-        alpha = Constant(1.0)
-        beta = Constant(0.1)
+        alpha =1.0
+        beta = 0.1
+        r = 0.01
         self.Lx = 2.0*pi  # Zonal length
         self.Ly = 2.0*pi  # Meridonal length
         self.mesh = PeriodicRectangleMesh(self.n, self.n, self.Lx, self.Ly, direction="x", quadrilateral=True, comm = comm)
-        self.x = SpatialCoordinate(self.mesh)
+        x = SpatialCoordinate(self.mesh)
 
         #FE spaces
-        self.V = FunctionSpace(self.mesh, "CG", 1) #  noise term
+        #self.V = FunctionSpace(self.mesh, "CG", 1) #  noise term
         self.Vcg = FunctionSpace(self.mesh, "CG", 1) # Streamfunctions
         self.Vdg = FunctionSpace(self.mesh, "DQ", 1) # potential vorticity (PV)
         self.Vu = FunctionSpace(self.mesh, "DQ", 0) # velocity
@@ -62,21 +65,27 @@ class Euler_SD(base_model):
         
         
         #####################################   Bilinear form  for noise variable  ################################################
-        dW_phi = TestFunction(self.V)
-        dW = TrialFunction(self.V)
-        self.dW_n = Function(self.V)
+        self.W_F = FunctionSpace(self.mesh, "DG", 0)
+        self.dW = Function(self.W_F)
+
+        
+        dW_phi = TestFunction(self.Vcg)
+        dw = TrialFunction(self.Vcg)
+        self.alpha_w = CellVolume(self.mesh)
+        # to store noise data
+        self.du_w = Function(self.Vcg)
         # Fix the right hand side white noise
-        self.dXi = Function(self.V)
-        self.dXi.assign(self.rg.normal(self.V, 0., 1.0))
+        
+        #self.dXi.assign(self.rg.normal(self.V, 0., 1.0))
 
         #### Define Bilinear form with Dirichlet BC 
-        bcs_dw = DirichletBC(self.V,  zero(), ("on_boundary"))
-        a_dW = inner(grad(dW), grad(dW_phi))*dx + dW*dW_phi*dx
-        L_dW = self.dt*self.dXi*dW_phi*dx
+        bcs_dw = DirichletBC(self.Vcg,  zero(), ("on_boundary"))
+        a_dW = inner(grad(dw), grad(dW_phi))*dx + dw*dW_phi*dx
+        L_dW = self.dW*dW_phi*dx
 
         
         #make a solver 
-        dW_problem = LinearVariationalProblem(a_dW, L_dW, self.dW_n, bcs=bcs_dw)
+        dW_problem = LinearVariationalProblem(a_dW, L_dW, self.du_w, bcs=bcs_dw)
         self.dW_solver = LinearVariationalSolver(dW_problem, solver_parameters={"ksp_type": "cg", "pc_type": "hypre"})
 
 
@@ -84,11 +93,12 @@ class Euler_SD(base_model):
         
         q = TrialFunction(self.Vdg)
         p = TestFunction(self.Vdg)
+        Q = Function(self.Vdg).interpolate(0.1 * sin(8*pi*x[0]))
 
         a_mass = p*q*dx
-        a_int = (dot(grad(p), -self.gradperp(self.psi0) *q) + beta*p*self.psi0.dx(0)) * dx  # with stream function
+        a_int = (dot(grad(p), -self.gradperp(self.psi0) *q) + beta*p*self.psi0.dx(0)+p*(Q-r*q)) * dx  # with stream function
         a_flux = (dot(jump(p), un("+") * q("+") - un("-") * q("-")))*dS                          # with velocity
-        a_noise = p*self.dW_n *dx                                                                          # with noise term
+        a_noise = p*self.du_w *dx                                                                          # with noise term
         arhs = a_mass - self.dt*(a_int+ a_flux+a_noise) 
 
         #print(type(action(arhs, self.q1)), 'action')
@@ -116,7 +126,7 @@ class Euler_SD(base_model):
         self.q0.assign(self.X[0])
         for step in range(self.nsteps):
             #compute the noise term
-            self.dXi.assign(self.X[step+1]) # why this term ?
+            self.dW.assign(self.X[step+1])
             self.dW_solver.solve()
 
             # Compute the streamfunction for the known value of q0
@@ -138,6 +148,8 @@ class Euler_SD(base_model):
             self.q0.assign(self.q0 / 3 + 2*self.dq1 /3)
         X1[0].assign(self.q0) # save sol at the nstep th time 
 
+
+    # control PV 
     def controls(self):
         controls_list = []
         for i in range(len(self.X)):
@@ -153,12 +165,12 @@ class Euler_SD(base_model):
         Y.interpolate(u)
         return Y
 
-
+    # fIX allocation method
     def allocate(self):
         particle = [Function(self.Vdg)]
         for i in range(self.nsteps):
-            dW_star = Function(self.V)
-            particle.append(dW_star) 
+            dW = Function(self.W_F)
+            particle.append(dW)
         return particle 
 
 
@@ -167,10 +179,17 @@ class Euler_SD(base_model):
         rg = self.rg
         count = 0
         for i in range(self.nsteps):
-               self.dXi.assign(rg.normal(self.V, 0., 1.0))
-               self.dW_solver.solve()
+            #    self.dXi.assign(rg.normal(self.V, 0., 0.5))
+            #    self.dW_solver.solve()
                count += 1
-               X[count].assign(c1*X[count] + c2*self.dW_n)
+               X[count].assign(c1*X[count] + c2*rg.normal(
+                self.W_F, 0., 0.125))
                if g:
                     X[count] += gscale*g[count]
                
+    def lambda_functional(self):
+        '''
+        Introduce lambda functional for nudging 
+        '''
+        pass
+
