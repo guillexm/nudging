@@ -25,6 +25,7 @@ class Camsholm(base_model):
         x, = SpatialCoordinate(self.mesh)
 
         #FE spaces
+        self.V = FunctionSpace(self.mesh, "CG", 1)
         V = FunctionSpace(self.mesh, "CG", 1)
         self.W = MixedFunctionSpace((V, V))
         self.w0 = Function(self.W)
@@ -55,7 +56,7 @@ class Camsholm(base_model):
         m0, u0 = split(self.w0)   # for n th time 
         
 
-        #Setup noise term using Matern formula
+        ####################### Setup noise term using Matern formula  ########################
         self.W_F = FunctionSpace(self.mesh, "DG", 0) 
         self.dW = Function(self.W_F) 
         self.alpha_w = CellVolume(self.mesh)
@@ -69,6 +70,8 @@ class Camsholm(base_model):
         w_prob = LinearVariationalProblem(a_w, L_w, self.dU)
         self.wsolver = LinearVariationalSolver(w_prob,
                                               solver_parameters=sp)     
+        
+        ########################################################################################
         
         #finite element linear functional 
         Dt = self.dt
@@ -88,11 +91,12 @@ class Camsholm(base_model):
         self.X = self.allocate()
 
         # vertex only mesh for observations
-        #x_obs =np.linspace(0, 40,num=self.xpoints, endpoint=False) # This is better choice
-        x_obs = np.arange(0.5,self.xpoints)
+        x_obs =np.linspace(0, 40,num=self.xpoints, endpoint=False) # This is better choice
+        #x_obs = np.arange(0.5,self.xpoints)
         x_obs_list = []
         for i in x_obs:
             x_obs_list.append([i])
+        #print(x_obs_list)
         self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
         self.VVOM = FunctionSpace(self.VOM, "DG", 0)
 
@@ -127,40 +131,6 @@ class Camsholm(base_model):
         # return outputs
         X1[0].assign(self.w0) # save sol at the nstep th time 
 
-    # not efficient but works need to replace in future
-    def forcast_data_allstep(self, X0):
-        # copy input into model variables for taping
-        for i in range(len(X0)):
-            self.X[i].assign(X0[i])
-
-        # copy initial condition into model variable
-        self.w0.assign(self.X[0])
-
-        # ensure momentum and velocity are syncronised
-        self.msolve.solve()
-
-        # do the timestepping
-        # save time steps 
-        w0_list = []
-        for step in range(self.nsteps):
-            # get noise variables and lambdas
-            self.dW.assign(self.X[step+1])
-            if self.lambdas:
-                self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
-            # solve  dW --> dU
-            self.wsolver.solve()
-            # advance in time
-            self.usolver.solve()
-            # copy output to input
-            self.w0.assign(self.w1)
-            m, u = self.w0.split()
-            Y = Function(self.VVOM)
-            Y.interpolate(u)
-            w0_list.append(Y.dat.data[:])
-        # return outputs
-        return w0_list # save sol at the nstep th time 
-
-
 
     def controls(self):
         controls_list = []
@@ -191,7 +161,7 @@ class Camsholm(base_model):
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(
-                self.W_F, 0., 1.0))
+                self.W_F, 0., 0.125))
             if g:
                 X[count] += gscale*g[count]
 
