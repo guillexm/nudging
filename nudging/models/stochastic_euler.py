@@ -8,16 +8,16 @@ from operator import mul
 from functools import reduce
 
 class Euler_SD(base_model):
-    def __init__(self, n, nsteps, dt = 0.1, seed=12353):
+    def __init__(self, n, nsteps, dt = 0.1, lambdas=False,seed=12353):
 
         self.n = n
         self.nsteps = nsteps
         self.dt = dt
+        self.lambdas = lambdas # include lambdas in allocate
         self.seed = seed
 
     def setup(self, comm = MPI.COMM_WORLD):
 
-        alpha =1.0
         beta = 0.1
         r = 0.01
         self.Lx = 2.0*pi  # Zonal length
@@ -68,21 +68,17 @@ class Euler_SD(base_model):
         self.W_F = FunctionSpace(self.mesh, "DG", 0)
         self.dW = Function(self.W_F)
 
-        
         dW_phi = TestFunction(self.Vcg)
         dw = TrialFunction(self.Vcg)
         self.alpha_w = CellVolume(self.mesh)
+
         # to store noise data
         self.du_w = Function(self.Vcg)
-        # Fix the right hand side white noise
-        
-        #self.dXi.assign(self.rg.normal(self.V, 0., 1.0))
 
         #### Define Bilinear form with Dirichlet BC 
         bcs_dw = DirichletBC(self.Vcg,  zero(), ("on_boundary"))
         a_dW = inner(grad(dw), grad(dW_phi))*dx + dw*dW_phi*dx
         L_dW = self.dW*dW_phi*dx
-
         
         #make a solver 
         dW_problem = LinearVariationalProblem(a_dW, L_dW, self.du_w, bcs=bcs_dw)
@@ -127,6 +123,8 @@ class Euler_SD(base_model):
         for step in range(self.nsteps):
             #compute the noise term
             self.dW.assign(self.X[step+1])
+            if self.lambdas:
+                self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
             self.dW_solver.solve()
 
             # Compute the streamfunction for the known value of q0
@@ -158,9 +156,9 @@ class Euler_SD(base_model):
         
 
     def obs(self):
-        self.q1.assign(self.q0)
-        self.psi_solver.solve()
-        u  = self.gradperp(self.psi0)
+        self.q1.assign(self.q0) # assigned at time t+1
+        self.psi_solver.solve() # solved at t+1 for psi
+        u  = self.gradperp(self.psi0) # evaluated velocity at time t+1
         Y = Function(self.VVOM)
         Y.interpolate(u)
         return Y
@@ -171,6 +169,10 @@ class Euler_SD(base_model):
         for i in range(self.nsteps):
             dW = Function(self.W_F)
             particle.append(dW)
+        if self.lambdas:
+            for i in range(self.nsteps):
+                dW = Function(self.W_F)
+                particle.append(dW)
         return particle 
 
 
@@ -179,8 +181,6 @@ class Euler_SD(base_model):
         rg = self.rg
         count = 0
         for i in range(self.nsteps):
-            #    self.dXi.assign(rg.normal(self.V, 0., 0.5))
-            #    self.dW_solver.solve()
                count += 1
                X[count].assign(c1*X[count] + c2*rg.normal(
                 self.W_F, 0., 0.125))
@@ -188,8 +188,18 @@ class Euler_SD(base_model):
                     X[count] += gscale*g[count]
                
     def lambda_functional(self):
-        '''
-        Introduce lambda functional for nudging 
-        '''
-        pass
+        nsteps = self.nsteps
+        dt = self.dt
+        for step in range(nsteps):
+            lambda_step = self.X[nsteps + 1 + step]
+            dW_step = self.X[1 + step]
+            
+            dlfunc = assemble((1/self.alpha_w)*lambda_step**2*dt/2*dx
+                - (1/self.alpha_w)*lambda_step*dW_step*dt**0.5*dx)
+            if step == 0:
+                lfunc = dlfunc
+            else:
+                lfunc += dlfunc
+        return lfunc
+
 
