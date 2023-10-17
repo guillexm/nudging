@@ -67,7 +67,7 @@ class base_filter(object, metaclass=ABCMeta):
         for i_rank in range(len(self.nensemble)):
             self.offset_list.append(sum(self.nensemble[:i_rank]))
         #a resampling method
-        self.resampler = residual_resampling(seed=resampler_seed)
+        self.resampler = residual_resampling(seed=resampler_seed, residual=True)
 
     def index2rank(self, index):
         for rank in range(len(self.offset_list)):
@@ -81,14 +81,16 @@ class base_filter(object, metaclass=ABCMeta):
         self.potential_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             potentials = self.potential_arr.data()
+            #PETSc.Sys.Print("Weight", potentials)
             # renormalise
             potentials -= np.mean(potentials)
             weights = np.exp(-dtheta*potentials)
             weights /= np.sum(weights)
+            #PETSc.Sys.Print("Weight", weights)
             self.ess = 1/np.sum(weights**2)
-            PETSc.Sys.Print("ESS", self.ess)
-            # if self.verbose:
-            #     PETSc.Sys.Print("ESS", self.ess)
+            # PETSc.Sys.Print("ESS", self.ess)
+            if self.verbose:
+                PETSc.Sys.Print("ESS", self.ess)
 
         # compute resampling protocol on rank 0
         if self.ensemble_rank == 0:
@@ -176,6 +178,12 @@ class sim_filter(base_filter):
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
+
+    def __init__(self, verbose=False):
+        super().__init__()
+        self.verbose = verbose
+        
+
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
         # forward model step
@@ -189,7 +197,7 @@ class bootstrap_filter(base_filter):
 
 
 class jittertemp_filter(base_filter):
-    def __init__(self, n_jitt=1, delta=None,
+    def __init__(self, n_jitt, delta=None,
                  verbose=False, MALA=False, nudging=False,
                  visualise_tape=False):
         self.delta = delta
@@ -237,7 +245,7 @@ class jittertemp_filter(base_filter):
         theta += dtheta
         return dtheta
 
-    def assimilation_step(self, y, log_likelihood, ess_tol=0.0):
+    def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
         N = self.nensemble[self.ensemble_rank]
         potentials = np.zeros(N)
         new_potentials = np.zeros(N)
@@ -279,7 +287,7 @@ class jittertemp_filter(base_filter):
                     self.Jhat.append(ReducedFunctional(nudge_J, m,
                                                   derivative_components=
                                                   components))
-            # functional for MALA
+            #functional for MALA
             components = [j for j in range(1, nsteps+1)]
             self.Jhat_dW = ReducedFunctional(MALA_J, m,
                                         derivative_components=
@@ -307,11 +315,12 @@ class jittertemp_filter(base_filter):
                         PETSc.Sys.Print("Solving for Lambda step ", step,
                                         "local ensemble member ", i)
                     self.Jhat[step].derivative()
-                    if i ==0:
-                        Xopt = minimize(self.Jhat[step], options={"disp": True})
-                    else:
-                        Xopt = minimize(self.Jhat[step])
-                    
+                    #print(gh(self.ensemble[i]))
+                    # if i ==0:
+                    #     Xopt = minimize(self.Jhat[step], options={"disp": True})
+                    # else:
+                    #     Xopt = minimize(self.Jhat[step])
+                    Xopt = minimize(self.Jhat[step])
                     # place the optimal value of lambda into ensemble
                     self.ensemble[i][nsteps+1+step].assign(
                         Xopt[nsteps+1+step])
@@ -369,13 +378,13 @@ class jittertemp_filter(base_filter):
                                              gscale=(
                                                  -2*delta/(2+delta)),g=g)
                     else:
-                        # proposal PCN
+                    # proposal PCN
                         self.model.copy(self.ensemble[i],
-                                        self.proposal_ensemble[i])
+                                            self.proposal_ensemble[i])
                         delta = self.delta
                         self.model.randomize(self.proposal_ensemble[i],
-                                             (2-delta)/(2+delta),
-                                             (8*delta)**0.5/(2+delta))
+                                            (2-delta)/(2+delta),
+                                            (8*delta)**0.5/(2+delta))
                     # put result of forward model into new_ensemble
                     self.model.run(self.proposal_ensemble[i],
                                    self.new_ensemble[i])
