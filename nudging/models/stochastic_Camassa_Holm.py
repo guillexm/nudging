@@ -8,8 +8,8 @@ from operator import mul
 from functools import reduce
 
 class Camsholm(base_model):
-    def __init__(self, n, nsteps, xpoints, lambdas=False,
-                 dt = 0.025, alpha=1.0, mu=0.01,  seed=12353):
+    def __init__(self, n, nsteps, xpoints, seed, lambdas=False,
+                 dt = 0.025, alpha=1.0, mu=0.01):
 
         self.n = n
         self.nsteps = nsteps
@@ -30,9 +30,8 @@ class Camsholm(base_model):
         self.W = MixedFunctionSpace((V, V))
         self.w0 = Function(self.W)
         m0, u0 = self.w0.split()       
-        One = Function(V).assign(1.0)
-        self.Area = assemble(One*dx)
-        
+        # One = Function(V).assign(1.0)
+        # self.Area = assemble(One*dx)
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
@@ -64,13 +63,22 @@ class Camsholm(base_model):
         du = TrialFunction(V)
         
         self.dU = Function(V)
+        dU_0 = Function(V)
+        dU_1 = Function(V)
         kappa_isq = 0.01
         a_w = (dphi*du + kappa_isq*dphi.dx(0)*du.dx(0))*dx
-        L_w = self.alpha_w*dphi*self.dW*dx
+        L_w0 = self.alpha_w*dphi*self.dW*dx
+        w_prob0 = LinearVariationalProblem(a_w, L_w0, dU_0)
+        self.wsolver0 = LinearVariationalSolver(w_prob0,
+                                              solver_parameters=sp)     
+        L_w1 = self.alpha_w*dphi*dU_0*dx
+        w_prob1 = LinearVariationalProblem(a_w, L_w1, dU_1)
+        self.wsolver1 = LinearVariationalSolver(w_prob1,
+                                              solver_parameters=sp)
+        L_w = self.alpha_w*dphi*dU_1*dx
         w_prob = LinearVariationalProblem(a_w, L_w, self.dU)
         self.wsolver = LinearVariationalSolver(w_prob,
-                                              solver_parameters=sp)     
-        
+                                              solver_parameters=sp) 
         ########################################################################################
         
         #finite element linear functional 
@@ -117,7 +125,9 @@ class Camsholm(base_model):
             self.dW.assign(self.X[step+1])
             if self.lambdas:
                 self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
-            # solve  dW --> dU
+            # solve  dW --> dU0 --> dU1 --> dU
+            self.wsolver0.solve()
+            self.wsolver1.solve()
             self.wsolver.solve()
             # advance in time
             self.usolver.solve()
@@ -161,7 +171,7 @@ class Camsholm(base_model):
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(
-                self.W_F, 0., 0.125))
+                self.W_F, 0., 1.0))
             if g:
                 X[count] += gscale*g[count]
 
