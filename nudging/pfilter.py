@@ -174,6 +174,11 @@ class sim_filter(base_filter):
         self.parallel_resample()
 
 class bootstrap_filter(base_filter):
+    def __init__(self, verbose=False):
+        super().__init__()
+        self.verbose = verbose
+
+
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
         # forward model step
@@ -234,7 +239,7 @@ class jittertemp_filter(base_filter):
         theta += dtheta
         return dtheta
 
-    def assimilation_step(self, y, log_likelihood, ess_tol=0.8):
+    def assimilation_step(self, y, log_likelihood, ess_tol=0.0):
         N = self.nensemble[self.ensemble_rank]
         potentials = np.zeros(N)
         new_potentials = np.zeros(N)
