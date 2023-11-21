@@ -88,7 +88,7 @@ class base_filter(object, metaclass=ABCMeta):
             weights /= np.sum(weights)
             #PETSc.Sys.Print("Weight", weights)
             self.ess = 1/np.sum(weights**2)
-            # PETSc.Sys.Print("ESS", self.ess)
+            #PETSc.Sys.Print("ESS", self.ess)
             if self.verbose:
                 PETSc.Sys.Print("ESS", self.ess)
 
@@ -253,6 +253,7 @@ class jittertemp_filter(base_filter):
         self.theta_temper = []
         nsteps = self.model.nsteps
 
+        self.temp_count  = 0
         # tape the forward model
         if not self.model_taped:
             if self.verbose:
@@ -316,11 +317,13 @@ class jittertemp_filter(base_filter):
                                         "local ensemble member ", i)
                     self.Jhat[step].derivative()
                     #print(gh(self.ensemble[i]))
-                    # if i ==0:
-                    #     Xopt = minimize(self.Jhat[step], options={"disp": True})
-                    # else:
-                    #     Xopt = minimize(self.Jhat[step])
-                    Xopt = minimize(self.Jhat[step])
+                    if i ==0:
+                        Xopt = minimize(self.Jhat[step], options={"disp": False})
+                    else:
+                        Xopt = minimize(self.Jhat[step])
+                    
+                    # Xopt = minimize(self.Jhat[step], options={"disp": False, "gtol": 0.01})
+                    ##Xopt = minimize(self.Jhat[step], options={"disp": True, "maxiter": 5,  "gtol": 0.1})
                     # place the optimal value of lambda into ensemble
                     self.ensemble[i][nsteps+1+step].assign(
                         Xopt[nsteps+1+step])
@@ -343,6 +346,7 @@ class jittertemp_filter(base_filter):
         theta = .0
         while theta <1.: #  Tempering loop
             dtheta = 1.0 - theta
+            self.temp_count += 1
 
             # adaptive dtheta choice
             dtheta = self.adaptive_dtheta(dtheta, theta,  ess_tol)
