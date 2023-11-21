@@ -30,8 +30,8 @@ class Camsholm(base_model):
         self.W = MixedFunctionSpace((V, V))
         self.w0 = Function(self.W)
         m0, u0 = self.w0.split()       
-        # One = Function(V).assign(1.0)
-        # self.Area = assemble(One*dx)
+        One = Function(V).assign(1.0)
+        self.Area = assemble(One*dx)
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
@@ -58,25 +58,36 @@ class Camsholm(base_model):
         ####################### Setup noise term using Matern formula  ########################
         self.W_F = FunctionSpace(self.mesh, "DG", 0) 
         self.dW = Function(self.W_F) 
-        self.alpha_w = CellVolume(self.mesh)
+        #self.alpha_w = CellVolume(self.mesh)
         dphi = TestFunction(V)
         du = TrialFunction(V)
         
-        self.dU = Function(V)
-        dU_0 = Function(V)
+        
+        cell_area = assemble(CellVolume(self.mesh)*dx)/self.Area
+        #print('cell_length', cell_area)
+        self.alpha_w = 1/cell_area**0.5
+        #print(alpha_w)
+        kappa_inv_sq = 2*cell_area**2
+        #print('kappa_inv_sq', kappa_inv_sq)
+
+
+
+
         dU_1 = Function(V)
-        kappa_isq = 0.01
-        a_w = (dphi*du + kappa_isq*dphi.dx(0)*du.dx(0))*dx
+        dU_2 = Function(V)
+        dU_3 = Function(V)
+        #kappa_isq = 0.01
+        a_w = (dphi*du + kappa_inv_sq*dphi.dx(0)*du.dx(0))*dx
         L_w0 = self.alpha_w*dphi*self.dW*dx
-        w_prob0 = LinearVariationalProblem(a_w, L_w0, dU_0)
+        w_prob0 = LinearVariationalProblem(a_w, L_w0, dU_1)
         self.wsolver0 = LinearVariationalSolver(w_prob0,
                                               solver_parameters=sp)     
-        L_w1 = self.alpha_w*dphi*dU_0*dx
-        w_prob1 = LinearVariationalProblem(a_w, L_w1, dU_1)
+        L_w1 = dphi*dU_1*dx
+        w_prob1 = LinearVariationalProblem(a_w, L_w1, dU_2)
         self.wsolver1 = LinearVariationalSolver(w_prob1,
                                               solver_parameters=sp)
-        L_w = self.alpha_w*dphi*dU_1*dx
-        w_prob = LinearVariationalProblem(a_w, L_w, self.dU)
+        L_w = dphi*dU_2*dx
+        w_prob = LinearVariationalProblem(a_w, L_w, dU_3)
         self.wsolver = LinearVariationalSolver(w_prob,
                                               solver_parameters=sp) 
         ########################################################################################
@@ -85,10 +96,17 @@ class Camsholm(base_model):
         Dt = self.dt
         mh = 0.5*(m1 + m0)
         uh = 0.5*(u1 + u0)
-        v = uh*Dt+self.dU*Dt**0.5
+
+        # #SALT noise 
+        # v = uh*Dt+dU_3*Dt**0.5
+        # L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx +
+        #      (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0))*dx) 
+
+        # #additive noise 
+        v = uh*Dt
 
         L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx +
-             (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0))*dx)
+             (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0)+p*dU_3*Dt**0.5)*dx) 
 
         # timestepping solver
         uprob = NonlinearVariationalProblem(L, self.w1)
@@ -99,7 +117,7 @@ class Camsholm(base_model):
         self.X = self.allocate()
 
         # vertex only mesh for observations
-        x_obs =np.linspace(0, 40,num=self.xpoints, endpoint=False) # This is better choice
+        x_obs =np.linspace(0, 40, num=self.xpoints, endpoint=False) # This is better choice
         #x_obs = np.arange(0.5,self.xpoints)
         x_obs_list = []
         for i in x_obs:
@@ -171,7 +189,7 @@ class Camsholm(base_model):
         for i in range(self.nsteps):
             count += 1
             X[count].assign(c1*X[count] + c2*rg.normal(
-                self.W_F, 0., 1.0))
+                self.W_F, 0., 0.5))
             if g:
                 X[count] += gscale*g[count]
 
@@ -182,8 +200,9 @@ class Camsholm(base_model):
             lambda_step = self.X[nsteps + 1 + step]
             dW_step = self.X[1 + step]
             
-            dlfunc = assemble((1/self.alpha_w)*lambda_step**2*dt/2*dx
-                - (1/self.alpha_w)*lambda_step*dW_step*dt**0.5*dx)
+            dlfunc = assemble((1/CellVolume(self.mesh))*lambda_step**2*dt/2*dx
+                                  - (1/CellVolume(self.mesh))*lambda_step*dW_step*dt**0.5*dx)
+            #dlfunc /= self.Area           # divide by area not cell length
             if step == 0:
                 lfunc = dlfunc
             else:
