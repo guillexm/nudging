@@ -395,8 +395,7 @@ class jittertemp_filter(base_filter):
 
                     # particle potentials
                     Y = self.model.obs()
-                    new_potentials[i] = exp(-theta*assemble(
-                        log_likelihood(y,Y)))
+                    new_potentials[i] = theta*assemble(log_likelihood(y,Y))
                     #accept reject of MALA and Jittering 
                     if l == 0:
                         potentials[i] = new_potentials[i]
@@ -405,9 +404,10 @@ class jittertemp_filter(base_filter):
                         if self.MALA:
                             p_accept = 1
                         else:
-                            p_accept = min(1,
-                                           exp(new_potentials[i]
-                                               - potentials[i]))
+                            p_accept = min(1, 
+                                            exp(potentials[i]
+                                                - new_potentials[i]))
+            
                         # accept or reject tool
                         u = self.model.rg.uniform(self.model.R, 0., 1.0)
                         if u.dat.data[:] < p_accept:
