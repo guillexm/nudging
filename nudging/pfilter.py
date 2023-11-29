@@ -413,7 +413,8 @@ class jittertemp_filter(base_filter):
 
         if self.verbose:
             PETSc.Sys.Print("Advancing ensemble")
-        self.model.run(self.ensemble[i], self.ensemble[i])
+        for i in range(N):
+            self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
             PETSc.Sys.Print("assimilation step complete")
         # momeory leak fix trick   
