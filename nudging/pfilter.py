@@ -81,14 +81,11 @@ class base_filter(object, metaclass=ABCMeta):
         self.potential_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             potentials = self.potential_arr.data()
-            #PETSc.Sys.Print("Weight", potentials)
             # renormalise
             potentials -= np.mean(potentials)
             weights = np.exp(-dtheta*potentials)
             weights /= np.sum(weights)
-            #PETSc.Sys.Print("Weight", weights)
             self.ess = 1/np.sum(weights**2)
-            #PETSc.Sys.Print("ESS", self.ess)
             if self.verbose:
                 PETSc.Sys.Print("ESS", self.ess)
 
@@ -227,7 +224,7 @@ class jittertemp_filter(base_filter):
             ess =0.
             while ess < ess_tol*sum(self.nensemble):
                 # renormalise using dtheta
-                potentials -= potentials.max()
+                potentials -= np.mean(potentials)
                 weights = np.exp(-dtheta*potentials)
                 weights /= np.sum(weights)
                 ess = 1/np.sum(weights**2)
@@ -407,7 +404,6 @@ class jittertemp_filter(base_filter):
                             p_accept = min(1, 
                                             exp(potentials[i]
                                                 - new_potentials[i]))
-            
                         # accept or reject tool
                         u = self.model.rg.uniform(self.model.R, 0., 1.0)
                         if u.dat.data[:] < p_accept:
