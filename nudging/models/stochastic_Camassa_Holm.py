@@ -8,7 +8,7 @@ from operator import mul
 from functools import reduce
 
 class Camsholm(base_model):
-    def __init__(self, n, nsteps, xpoints, seed, lambdas=False,
+    def __init__(self, n, nsteps, xpoints, seed=12353, lambdas=False,
                  dt = 0.025, alpha=1.0, mu=0.01):
 
         self.n = n
@@ -29,7 +29,7 @@ class Camsholm(base_model):
         V = FunctionSpace(self.mesh, "CG", 1)
         self.W = MixedFunctionSpace((V, V))
         self.w0 = Function(self.W)
-        m0, u0 = self.w0.split()       
+        m0, u0 = self.w0.split()
         One = Function(V).assign(1.0)
         self.Area = assemble(One*dx)
         #Interpolate the initial condition
@@ -46,23 +46,23 @@ class Camsholm(base_model):
         self.msolve = LinearVariationalSolver(mprob,
                                               solver_parameters=sp)
 
-        #Build the weak form of the timestepping algorithm. 
+        #Build the weak form of the timestepping algorithm.
 
         p, q = TestFunctions(self.W)
         self.w1 = Function(self.W)
         self.w1.assign(self.w0)
         m1, u1 = split(self.w1)   # for n+1 the  time
-        m0, u0 = split(self.w0)   # for n th time 
-        
+        m0, u0 = split(self.w0)   # for n th time
+
 
         ####################### Setup noise term using Matern formula  ########################
-        self.W_F = FunctionSpace(self.mesh, "DG", 0) 
-        self.dW = Function(self.W_F) 
+        self.W_F = FunctionSpace(self.mesh, "DG", 0)
+        self.dW = Function(self.W_F)
         #self.alpha_w = CellVolume(self.mesh)
         dphi = TestFunction(V)
         du = TrialFunction(V)
-        
-        
+
+
         cell_area = assemble(CellVolume(self.mesh)*dx)/self.Area
         #print('cell_length', cell_area)
         self.alpha_w = 1/cell_area**0.5
@@ -81,7 +81,7 @@ class Camsholm(base_model):
         L_w0 = self.alpha_w*dphi*self.dW*dx
         w_prob0 = LinearVariationalProblem(a_w, L_w0, dU_1)
         self.wsolver0 = LinearVariationalSolver(w_prob0,
-                                              solver_parameters=sp)     
+                                              solver_parameters=sp)
         L_w1 = dphi*dU_1*dx
         w_prob1 = LinearVariationalProblem(a_w, L_w1, dU_2)
         self.wsolver1 = LinearVariationalSolver(w_prob1,
@@ -89,24 +89,24 @@ class Camsholm(base_model):
         L_w = dphi*dU_2*dx
         w_prob = LinearVariationalProblem(a_w, L_w, dU_3)
         self.wsolver = LinearVariationalSolver(w_prob,
-                                              solver_parameters=sp) 
+                                              solver_parameters=sp)
         ########################################################################################
-        
-        #finite element linear functional 
+
+        #finite element linear functional
         Dt = self.dt
         mh = 0.5*(m1 + m0)
         uh = 0.5*(u1 + u0)
 
-        # #SALT noise 
+        # #SALT noise
         # v = uh*Dt+dU_3*Dt**0.5
         # L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx +
-        #      (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0))*dx) 
+        #      (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0))*dx)
 
-        # #additive noise 
+        # #additive noise
         v = uh*Dt
 
         L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx +
-             (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0)+p*dU_3*Dt**0.5)*dx) 
+             (p*(m1-m0)+ (p*v.dx(0)*mh -p.dx(0)*v*mh)+self.mu*Dt*p.dx(0)*mh.dx(0)+p*dU_3*Dt**0.5)*dx)
 
         # timestepping solver
         uprob = NonlinearVariationalProblem(L, self.w1)
@@ -157,7 +157,7 @@ class Camsholm(base_model):
                 self.data_store(self.w0)
 
         # return outputs
-        X1[0].assign(self.w0) # save sol at the nstep th time 
+        X1[0].assign(self.w0) # save sol at the nstep th time
 
 
     def controls(self):
@@ -165,7 +165,7 @@ class Camsholm(base_model):
         for i in range(len(self.X)):
             controls_list.append(Control(self.X[i]))
         return controls_list
-        
+
     def obs(self):
         m, u = self.w0.split()
         Y = Function(self.VVOM)
@@ -199,7 +199,7 @@ class Camsholm(base_model):
         for step in range(nsteps):
             lambda_step = self.X[nsteps + 1 + step]
             dW_step = self.X[1 + step]
-            
+
             dlfunc = assemble((1/CellVolume(self.mesh))*lambda_step**2*dt/2*dx
                                   - (1/CellVolume(self.mesh))*lambda_step*dW_step*dt**0.5*dx)
             #dlfunc /= self.Area           # divide by area not cell length

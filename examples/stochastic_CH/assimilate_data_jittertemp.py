@@ -7,8 +7,8 @@ from pyadjoint import AdjFloat
 
 from nudging.models.stochastic_Camassa_Holm import Camsholm
 
-""" read obs from saved file 
-    Do assimilation step for tempering and jittering steps 
+""" read obs from saved file
+    Do assimilation step for tempering and jittering steps
 """
 
 nsteps = 5
@@ -16,13 +16,12 @@ xpoints = 40
 model = Camsholm(100, nsteps, xpoints)
 MALA = True
 verbose = True
-jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
-                             verbose=verbose, MALA=MALA)
+jtfilter = jittertemp_filter(n_jitt = 4, verbose=verbose, MALA=MALA)
 
 nensemble = [5,5,5,5]
 jtfilter.setup(nensemble, model)
 
-x, = SpatialCoordinate(model.mesh) 
+x, = SpatialCoordinate(model.mesh)
 
 #prepare the initial ensemble
 for i in range(nensemble[jtfilter.ensemble_rank]):
@@ -40,24 +39,26 @@ for i in range(nensemble[jtfilter.ensemble_rank]):
 def log_likelihood(y, Y):
     ll = (y-Y)**2/0.05**2/2*dx
     return ll
-    
+
 #Load data
 y_exact = np.load('y_true.npy')
-y = np.load('y_obs.npy') 
+y = np.load('y_obs.npy')
 N_obs = y.shape[0]
 
 yVOM = Function(model.VVOM)
 
+'''
 # prepare shared arrays for data
 y_e_list = []
 y_sim_obs_list = []
-for m in range(y.shape[1]):        
-    y_e_shared = SharedArray(partition=nensemble, 
+for m in range(y.shape[1]):
+    y_e_shared = SharedArray(partition=nensemble,
                                   comm=jtfilter.subcommunicators.ensemble_comm)
-    y_sim_obs_shared = SharedArray(partition=nensemble, 
+    y_sim_obs_shared = SharedArray(partition=nensemble,
                                  comm=jtfilter.subcommunicators.ensemble_comm)
     y_e_list.append(y_e_shared)
     y_sim_obs_list.append(y_sim_obs_shared)
+
 
 ys = y.shape
 if COMM_WORLD.rank == 0:
@@ -72,11 +73,13 @@ def mycallback(ensemble):
    X = ensemble[0]
    mylist.append(X.at(xpt))
 
+'''
 # do assimiliation step
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
     yVOM.dat.data[:] = y[k, :]
 
+    '''
 
     # make a copy so that we don't overwrite the initial condition
     # in the next step
@@ -100,17 +103,17 @@ for k in range(N_obs):
             y_sim_obs_list[m].synchronise()
             if COMM_WORLD.rank == 0:
                 y_sim_obs_alltime_step[:, step, m] = y_sim_obs_list[m].data()
-                y_sim_obs_allobs_step[:,nsteps*k+step,m] = y_sim_obs_alltime_step[:, step, m]                
-
+                y_sim_obs_allobs_step[:,nsteps*k+step,m] = y_sim_obs_alltime_step[:, step, m]
+    '''
     # actually do the data assimilation step
     jtfilter.assimilation_step(yVOM, log_likelihood)
 
-        
+
     for i in range(nensemble[jtfilter.ensemble_rank]):
         model.w0.assign(jtfilter.ensemble[i][0])
         obsdata = model.obs().dat.data[:]
         for m in range(y.shape[1]):
-            y_e_list[m].dlocal[i] = obsdata[m]    
+            y_e_list[m].dlocal[i] = obsdata[m]
 
     for m in range(y.shape[1]):
         y_e_list[m].synchronise()
@@ -123,4 +126,3 @@ if COMM_WORLD.rank == 0:
     print("Ensemble member", y_e.shape)
     np.save("assimilated_ensemble.npy", y_e)
     np.save("simualated_all_time_obs.npy", y_sim_obs_allobs_step)
-
