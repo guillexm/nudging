@@ -48,6 +48,7 @@ N_obs = y.shape[0]
 
 yVOM = Function(model.VVOM)
 
+'''
 # prepare shared arrays for data
 y_e_list = []
 y_sim_obs_list = []
@@ -71,6 +72,7 @@ def mycallback(ensemble):
    xpt = np.arange(0.5,40.0) # need to change the according to generate data
    X = ensemble[0]
    mylist.append(X.at(xpt))
+'''
 
 # do assimiliation step
 for k in range(N_obs):
