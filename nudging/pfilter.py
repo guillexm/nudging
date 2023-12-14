@@ -35,8 +35,8 @@ class base_filter(object, metaclass=ABCMeta):
         self.model.setup(self.subcommunicators.comm)
         if isinstance(nensemble, int):
             nensemble = tuple(nensemble for _ in range(self.subcommunicators.comm.size))
-        
-        # setting up ensemble 
+
+        # setting up ensemble
         self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
         self.ensemble = []
@@ -75,9 +75,9 @@ class base_filter(object, metaclass=ABCMeta):
                 rank -= 1
                 break
         return rank
-        
+
     def parallel_resample(self, dtheta=1):
-        
+
         self.potential_arr.synchronise(root=0)
         if self.ensemble_rank == 0:
             potentials = self.potential_arr.data()
@@ -101,7 +101,7 @@ class base_filter(object, metaclass=ABCMeta):
         self.s_copy = s_copy
 
         mpi_requests = []
-        
+
         for ilocal in range(self.nensemble[self.ensemble_rank]):
             iglobal = self.layout.transform_index(ilocal, itype='l',
                                              rtype='g')
@@ -148,7 +148,7 @@ class base_filter(object, metaclass=ABCMeta):
 
 
 
-        
+
     @abstractmethod
     def assimilation_step(self, y, log_likelihood):
         """
@@ -179,14 +179,14 @@ class bootstrap_filter(base_filter):
     def __init__(self, verbose=False):
         super().__init__()
         self.verbose = verbose
-        
+
 
     def assimilation_step(self, y, log_likelihood):
         N = self.nensemble[self.ensemble_rank]
         # forward model step
         for i in range(N):
             self.model.randomize(self.ensemble[i])
-            self.model.run(self.ensemble[i], self.ensemble[i])   
+            self.model.run(self.ensemble[i], self.ensemble[i])
 
             Y = self.model.obs()
             self.potential_arr.dlocal[i] = assemble(log_likelihood(y,Y))
@@ -318,7 +318,7 @@ class jittertemp_filter(base_filter):
                         Xopt = minimize(self.Jhat[step], options={"disp": False})
                     else:
                         Xopt = minimize(self.Jhat[step])
-                    
+
                     # Xopt = minimize(self.Jhat[step], options={"disp": False, "gtol": 0.01})
                     ##Xopt = minimize(self.Jhat[step], options={"disp": True, "maxiter": 5,  "gtol": 0.1})
                     # place the optimal value of lambda into ensemble
@@ -393,7 +393,7 @@ class jittertemp_filter(base_filter):
                     # particle potentials
                     Y = self.model.obs()
                     new_potentials[i] = theta*assemble(log_likelihood(y,Y))
-                    #accept reject of MALA and Jittering 
+                    #accept reject of MALA and Jittering
                     if l == 0:
                         potentials[i] = new_potentials[i]
                     else:
@@ -401,7 +401,7 @@ class jittertemp_filter(base_filter):
                         if self.MALA:
                             p_accept = 1
                         else:
-                            p_accept = min(1, 
+                            p_accept = min(1,
                                             exp(potentials[i]
                                                 - new_potentials[i]))
                         # accept or reject tool
@@ -417,5 +417,5 @@ class jittertemp_filter(base_filter):
             self.model.run(self.ensemble[i], self.ensemble[i])
         if self.verbose:
             PETSc.Sys.Print("assimilation step complete")
-        # momeory leak fix trick   
+        # momeory leak fix trick
         PETSc.garbage_cleanup(PETSc.COMM_SELF)

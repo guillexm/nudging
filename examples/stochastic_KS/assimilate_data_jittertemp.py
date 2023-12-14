@@ -16,8 +16,7 @@ xpoints = 40
 model = KS(100, nsteps, xpoints)
 MALA = True
 verbose = True
-jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
-                             verbose=verbose, MALA=MALA)
+jtfilter = jittertemp_filter(n_jitt=4, verbose=verbose, MALA=MALA)
 
 nensemble = [5,5,5,5]
 jtfilter.setup(nensemble, model)
@@ -48,7 +47,6 @@ N_obs = y.shape[0]
 
 yVOM = Function(model.VVOM)
 
-'''
 # prepare shared arrays for data
 y_e_list = []
 y_sim_obs_list = []
@@ -72,7 +70,6 @@ def mycallback(ensemble):
    xpt = np.arange(0.5,40.0) # need to change the according to generate data
    X = ensemble[0]
    mylist.append(X.at(xpt))
-'''
 
 # do assimiliation step
 for k in range(N_obs):

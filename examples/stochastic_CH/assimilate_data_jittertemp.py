@@ -47,7 +47,6 @@ N_obs = y.shape[0]
 
 yVOM = Function(model.VVOM)
 
-'''
 # prepare shared arrays for data
 y_e_list = []
 y_sim_obs_list = []
@@ -73,13 +72,10 @@ def mycallback(ensemble):
    X = ensemble[0]
    mylist.append(X.at(xpt))
 
-'''
 # do assimiliation step
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
     yVOM.dat.data[:] = y[k, :]
-
-    '''
 
     # make a copy so that we don't overwrite the initial condition
     # in the next step

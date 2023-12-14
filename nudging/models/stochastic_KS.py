@@ -18,13 +18,13 @@ class KS(base_model):
 
     def setup(self, comm = MPI.COMM_WORLD):
         self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm)
-        x, = SpatialCoordinate(self.mesh)
-        V = FunctionSpace(self.mesh, "HER", 3)
+        self.x, = SpatialCoordinate(self.mesh)
+        self.V = FunctionSpace(self.mesh, "HER", 3)
         #w at time n-1
         #for the finite difference approximation of the time derivative
         self.w0 = Function(self.V)
         self.x = SpatialCoordinate(self.mesh)
-        One = Function(V).assign(1.0)
+        One = Function(self.V).assign(1.0)
         self.Area = assemble(One*dx)
 
         #initial condition
