@@ -1,8 +1,8 @@
-from firedrake import *
+import firedrake as fd
 from firedrake_adjoint import *
 from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
-from nudging.model import *
+from nudging.model import base_model
 import numpy as np
 from operator import mul
 from functools import reduce
@@ -21,71 +21,63 @@ class Camsholm(base_model):
         self.lambdas = lambdas # include lambdas in allocate
 
     def setup(self, comm = MPI.COMM_WORLD):
-        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
-        x, = SpatialCoordinate(self.mesh)
+        self.mesh = fd.PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
+        x, = fd.SpatialCoordinate(self.mesh)
 
         #FE spaces
-        self.V = FunctionSpace(self.mesh, "CG", 1)
-        V = FunctionSpace(self.mesh, "CG", 1)
-        self.W = MixedFunctionSpace((V, V))
-        self.w0 = Function(self.W)
+        self.V = fd.FunctionSpace(self.mesh, "CG", 1)
+        V = fd.FunctionSpace(self.mesh, "CG", 1)
+        self.W = fd.MixedFunctionSpace((V, V))
+        self.w0 = fd.Function(self.W)
         m0, u0 = self.w0.split()       
-        One = Function(V).assign(1.0)
-        self.Area = assemble(One*dx)
+        One = fd.Function(V).assign(1.0)
+        dx = fd.dx
+        self.Area = fd.assemble(One*dx)
         #Interpolate the initial condition
 
         #Solve for the initial condition for m.
         alphasq = self.alpha**2
-        p = TestFunction(V)
-        m = TrialFunction(V)
+        p = fd.TestFunction(V)
+        m = fd.TrialFunction(V)
 
         am = p*m*dx
         Lm = (p*u0 + alphasq*p.dx(0)*u0.dx(0))*dx
-        mprob = LinearVariationalProblem(am, Lm, m0)
+        mprob = fd.LinearVariationalProblem(am, Lm, m0)
         sp={'ksp_type': 'preonly', 'pc_type': 'lu'}
-        self.msolve = LinearVariationalSolver(mprob,
-                                              solver_parameters=sp)
+        self.msolve = fd.LinearVariationalSolver(mprob,
+                                                 solver_parameters=sp)
 
         #Build the weak form of the timestepping algorithm. 
 
-        p, q = TestFunctions(self.W)
-        self.w1 = Function(self.W)
+        p, q = fd.TestFunctions(self.W)
+        self.w1 = fd.Function(self.W)
         self.w1.assign(self.w0)
-        m1, u1 = split(self.w1)   # for n+1 the  time
-        m0, u0 = split(self.w0)   # for n th time 
+        m1, u1 = fd.split(self.w1)   # for n+1 the  time
+        m0, u0 = fd.split(self.w0)   # for n th time 
         
-
-        ####################### Setup noise term using Matern formula  ########################
-        self.W_F = FunctionSpace(self.mesh, "DG", 0) 
-        self.dW = Function(self.W_F) 
-        #self.alpha_w = CellVolume(self.mesh)
-        dphi = TestFunction(V)
-        du = TrialFunction(V)
+        # Setup noise term using Matern formula
+        self.W_F = fd.FunctionSpace(self.mesh, "DG", 0) 
+        self.dW = fd.Function(self.W_F) 
+        dphi = fd.TestFunction(V)
+        du = fd.TrialFunction(V)
         
-        
-        cell_area = assemble(CellVolume(self.mesh)*dx)/self.Area
-        #print('cell_length', cell_area)
-        self.alpha_w = 1/cell_area**0.5
-        #print(alpha_w)
+        cell_area = fd.CellVolume(self.mesh)
+        alpha_w = (1/cell_area**0.5)
         kappa_inv_sq = 2*cell_area**2
-        #print('kappa_inv_sq', kappa_inv_sq)
 
-
-
-
-        dU_1 = Function(V)
-        dU_2 = Function(V)
-        dU_3 = Function(V)
+        dU_1 = fd.Function(V)
+        dU_2 = fd.Function(V)
+        dU_3 = fd.Function(V)
         #kappa_isq = 0.01
         a_w = (dphi*du + kappa_inv_sq*dphi.dx(0)*du.dx(0))*dx
-        L_w0 = self.alpha_w*dphi*self.dW*dx
-        w_prob0 = LinearVariationalProblem(a_w, L_w0, dU_1)
-        self.wsolver0 = LinearVariationalSolver(w_prob0,
-                                              solver_parameters=sp)     
+        L_w0 = alpha_w*dphi*self.dW*dx
+        w_prob0 = fd.LinearVariationalProblem(a_w, L_w0, dU_1)
+        self.wsolver0 = fd.LinearVariationalSolver(w_prob0,
+                                                   solver_parameters=sp)     
         L_w1 = dphi*dU_1*dx
-        w_prob1 = LinearVariationalProblem(a_w, L_w1, dU_2)
-        self.wsolver1 = LinearVariationalSolver(w_prob1,
-                                              solver_parameters=sp)
+        w_prob1 = fd.LinearVariationalProblem(a_w, L_w1, dU_2)
+        self.wsolver1 = fd.LinearVariationalSolver(w_prob1,
+                                                   solver_parameters=sp)
         L_w = dphi*dU_2*dx
         w_prob = LinearVariationalProblem(a_w, L_w, dU_3)
         self.wsolver = LinearVariationalSolver(w_prob,
