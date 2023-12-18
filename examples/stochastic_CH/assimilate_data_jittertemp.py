@@ -1,28 +1,25 @@
-from firedrake import *
-from nudging import *
+import firedrake as fd
+import nudging as ndg
 import numpy as np
-import matplotlib.pyplot as plt
 from firedrake.petsc import PETSc
-from pyadjoint import AdjFloat
 
-from nudging.models.stochastic_Camassa_Holm import Camsholm
-
-""" read obs from saved file 
-    Do assimilation step for tempering and jittering steps 
+"""
+read obs from saved file
+Do assimilation step for tempering and jittering steps
 """
 
 nsteps = 5
 xpoints = 40
-model = Camsholm(100, nsteps, xpoints)
+model = ndg.Camsholm(100, nsteps, xpoints)
 MALA = True
 verbose = True
-jtfilter = jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
-                             verbose=verbose, MALA=MALA)
+jtfilter = ndg.jittertemp_filter(n_temp=4, n_jitt = 4, rho= 0.99,
+                                 verbose=verbose, MALA=MALA)
 
 nensemble = [5,5,5,5]
 jtfilter.setup(nensemble, model)
 
-x, = SpatialCoordinate(model.mesh) 
+x, = fd.SpatialCoordinate(model.mesh) 
 
 #prepare the initial ensemble
 for i in range(nensemble[jtfilter.ensemble_rank]):
@@ -30,8 +27,8 @@ for i in range(nensemble[jtfilter.ensemble_rank]):
     dx1 = model.rg.normal(model.R, 0., 0.05)
     a = model.rg.uniform(model.R, 0., 1.0)
     b = model.rg.uniform(model.R, 0., 1.0)
-    u0_exp = (1+a)*0.2*2/(exp(x-403./15. + dx0) + exp(-x+403./15. + dx0)) \
-        + (1+b)*0.5*2/(exp(x-203./15. + dx1)+exp(-x+203./15. + dx1))
+    u0_exp = (1+a)*0.2*2/(exp(x-403./15. + dx0) + exp(-x+403./15. + dx0)) 
+    u0_exp += (1+b)*0.5*2/(exp(x-203./15. + dx1)+exp(-x+203./15. + dx1))
 
     _, u = jtfilter.ensemble[i][0].split()
     u.interpolate(u0_exp)
@@ -46,16 +43,16 @@ y_exact = np.load('y_true.npy')
 y = np.load('y_obs.npy') 
 N_obs = y.shape[0]
 
-yVOM = Function(model.VVOM)
+yVOM = fd.Function(model.VVOM)
 
 # prepare shared arrays for data
 y_e_list = []
 y_sim_obs_list = []
-for m in range(y.shape[1]):        
-    y_e_shared = SharedArray(partition=nensemble, 
-                                  comm=jtfilter.subcommunicators.ensemble_comm)
-    y_sim_obs_shared = SharedArray(partition=nensemble, 
+for m in range(y.shape[1]):  
+    y_e_shared = ndg.SharedArray(partition=nensemble, 
                                  comm=jtfilter.subcommunicators.ensemble_comm)
+    y_sim_obs_shared = ndg.SharedArray(partition=nensemble, 
+                                       comm=jtfilter.subcommunicators.ensemble_comm)
     y_e_list.append(y_e_shared)
     y_sim_obs_list.append(y_sim_obs_shared)
 
@@ -76,7 +73,6 @@ def mycallback(ensemble):
 for k in range(N_obs):
     PETSc.Sys.Print("Step", k)
     yVOM.dat.data[:] = y[k, :]
-
 
     # make a copy so that we don't overwrite the initial condition
     # in the next step
@@ -104,7 +100,6 @@ for k in range(N_obs):
 
     # actually do the data assimilation step
     jtfilter.assimilation_step(yVOM, log_likelihood)
-
         
     for i in range(nensemble[jtfilter.ensemble_rank]):
         model.w0.assign(jtfilter.ensemble[i][0])
