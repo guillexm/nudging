@@ -143,4 +143,4 @@ if fd.COMM_WORLD.rank == 0:
     u_sim_allobs_step = np.stack((u1_sim_obs_allobs_step,
                                   u2_sim_obs_allobs_step), axis=-1)
     np.save("Velocity_ensemble.npy", u_e)
-    np.save("Velocity simualated_all_time.npy", u_sim_allobs_step)
+    np.save("Velocity simalated_all_time.npy", u_sim_allobs_step)

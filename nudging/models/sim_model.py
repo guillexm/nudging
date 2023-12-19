@@ -1,7 +1,6 @@
-from firedrake import *
-from firedrake.petsc import PETSc
+import firedrake as fd
 from pyop2.mpi import MPI
-from nudging.model import *
+from nudging.model import base_model
 import numpy as np
 
 
@@ -11,17 +10,17 @@ class SimModel(base_model):
         self.seed = seed
 
     def setup(self, comm=MPI.COMM_WORLD):
-        self.mesh = UnitSquareMesh(20,20, comm = comm)
-        self.V = FunctionSpace(self.mesh, "CG", 1)
+        self.mesh = fd.UnitSquareMesh(20, 20, comm=comm)
+        self.V = fd.FunctionSpace(self.mesh, "CG", 1)
 
     def run(self, X):
         pass
 
     def obs(self):
-        return np.random.normal(0,1)
+        return np.random.normal(0, 1)
 
     def allocate(self):
-        return Function(self.V)
+        return fd.Function(self.V)
 
     def randomize(self):
         pass
