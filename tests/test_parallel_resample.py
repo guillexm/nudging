@@ -1,7 +1,6 @@
 from nudging.models.sim_model import SimModel
 from nudging import sim_filter
 
-import numpy as np
 import pytest
 
 
@@ -14,7 +13,7 @@ def parallel_resample():
     simfilter.setup(nensemble, model)
     model.ensemble_rank = simfilter.ensemble_rank
 
-    s = [4,3,7,0,1,5,2,6,9,8]
+    s = [4, 3, 7, 0, 1, 5, 2, 6, 9, 8]
     simfilter.assimilation_step(s=s)
     for i in range(len(simfilter.ensemble)):
         iglobal = simfilter.layout.transform_index(i, itype='l',

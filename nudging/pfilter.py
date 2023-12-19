@@ -62,7 +62,7 @@ class base_filter(object, metaclass=ABCMeta):
         # data layout for coordinating resampling communication
         self.layout = DistributedDataLayout1D(self.nensemble,
                                               comm=ecomm)
-        
+
         # offset_list
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
@@ -172,8 +172,6 @@ class sim_filter(base_filter):
         for i in range(self.nensemble[self.ensemble_rank]):
             # set the particle value to the global index
             self.ensemble[i][0].assign(self.offset_list[self.ensemble_rank]+i)
-
-            Y = self.model.obs()
         self.parallel_resample(s=s)
 
 
