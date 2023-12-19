@@ -20,7 +20,10 @@ class SimModel(base_model):
         return np.random.normal(0, 1)
 
     def allocate(self):
-        return fd.Function(self.V)
+        return [fd.Function(self.V)]
 
     def randomize(self):
+        pass
+
+    def controls(self):
         pass

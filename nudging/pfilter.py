@@ -62,7 +62,7 @@ class base_filter(object, metaclass=ABCMeta):
         # data layout for coordinating resampling communication
         self.layout = DistributedDataLayout1D(self.nensemble,
                                               comm=ecomm)
-
+        
         # offset_list
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
@@ -78,28 +78,32 @@ class base_filter(object, metaclass=ABCMeta):
                 break
         return rank
 
-    def parallel_resample(self, dtheta=1):
-        self.potential_arr.synchronise(root=0)
-        if self.ensemble_rank == 0:
-            potentials = self.potential_arr.data()
-            # renormalise
-            potentials -= np.mean(potentials)
-            weights = np.exp(-dtheta*potentials)
-            weights /= np.sum(weights)
-            self.ess = 1/np.sum(weights**2)
-            if self.verbose:
-                PETSc.Sys.Print("ESS", self.ess)
+    def parallel_resample(self, dtheta=1, s=None):
 
-        # compute resampling protocol on rank 0
-        if self.ensemble_rank == 0:
-            s = self.resampler.resample(weights, self.model)
-            for i in range(self.nglobal):
-                self.s_arr[i] = s[i]
+        if s:
+            s_copy = s
+            self.s_copy = s
+        else:
+            self.potential_arr.synchronise(root=0)
+            if self.ensemble_rank == 0:
+                potentials = self.potential_arr.data()
+                # renormalise
+                potentials -= np.mean(potentials)
+                weights = np.exp(-dtheta*potentials)
+                weights /= np.sum(weights)
+                self.ess = 1/np.sum(weights**2)
+                if self.verbose:
+                    PETSc.Sys.Print("ESS", self.ess)
 
-        # broadcast protocol to every rank
-        self.s_arr.synchronise()
-        s_copy = self.s_arr.data()
-        self.s_copy = s_copy
+            # compute resampling protocol on rank 0
+                s = self.resampler.resample(weights, self.model)
+                for i in range(self.nglobal):
+                    self.s_arr[i] = s[i]
+
+            # broadcast protocol to every rank
+            self.s_arr.synchronise()
+            s_copy = self.s_arr.data()
+            self.s_copy = s_copy
 
         mpi_requests = []
 
@@ -113,7 +117,7 @@ class base_filter(object, metaclass=ABCMeta):
                     targets.append(j)
 
             for target in targets:
-                if type(self.ensemble[ilocal] == 'list'):
+                if type(self.ensemble[ilocal]) == list:
                     for k in range(len(self.ensemble[ilocal])):
                         request_send = self.subcommunicators.isend(
                             self.ensemble[ilocal][k],
@@ -128,7 +132,7 @@ class base_filter(object, metaclass=ABCMeta):
                     mpi_requests.extend(request_send)
 
             source_rank = self.index2rank(s_copy[iglobal])
-            if type(self.ensemble[ilocal] == 'list'):
+            if type(self.ensemble[ilocal]) == list:
                 for k in range(len(self.ensemble[ilocal])):
                     request_recv = self.subcommunicators.irecv(
                         self.new_ensemble[ilocal][k],
@@ -164,14 +168,13 @@ class sim_filter(base_filter):
     def __init__(self):
         super().__init__()
 
-    def assimilation_step(self, y, log_likelihood):
+    def assimilation_step(self, s):
         for i in range(self.nensemble[self.ensemble_rank]):
             # set the particle value to the global index
-            self.ensemble[i].assign(self.offset_list[self.ensemble_rank]+i)
+            self.ensemble[i][0].assign(self.offset_list[self.ensemble_rank]+i)
 
             Y = self.model.obs()
-            self.potential_arr.dlocal[i] = fd.assemble(log_likelihood(y, Y))
-        self.parallel_resample()
+        self.parallel_resample(s=s)
 
 
 class bootstrap_filter(base_filter):
