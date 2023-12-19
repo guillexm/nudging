@@ -1,14 +1,13 @@
-from abc import ABCMeta, abstractmethod, abstractproperty
-from firedrake import *
+from abc import ABCMeta, abstractmethod
+import firedrake as fd
 from firedrake.petsc import PETSc
 from pyop2.mpi import MPI
-from .resampling import *
+from .resampling import residual_resampling
 import numpy as np
-import pyadjoint
-import gc
 from .parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
-from firedrake_adjoint import *
-pyadjoint.tape.pause_annotation()
+from firedrake.adjoint import pause_annotation, continue_annotation, \
+    get_working_tape
+
 
 class base_filter(object, metaclass=ABCMeta):
     ensemble = []
@@ -27,16 +26,17 @@ class base_filter(object, metaclass=ABCMeta):
         self.model = model
         self.nensemble = nensemble
         n_ensemble_partitions = len(nensemble)
-        self.nspace = int(COMM_WORLD.size/n_ensemble_partitions)
-        assert(self.nspace*n_ensemble_partitions == COMM_WORLD.size)
+        self.nspace = int(MPI.COMM_WORLD.size/n_ensemble_partitions)
+        assert self.nspace*n_ensemble_partitions == MPI.COMM_WORLD.size
 
-        self.subcommunicators = Ensemble(COMM_WORLD, self.nspace)
+        self.subcommunicators = fd.Ensemble(MPI.COMM_WORLD, self.nspace)
         # model needs to build the mesh in setup
         self.model.setup(self.subcommunicators.comm)
         if isinstance(nensemble, int):
-            nensemble = tuple(nensemble for _ in range(self.subcommunicators.comm.size))
-        
-        # setting up ensemble 
+            nensemble = tuple(nensemble for _ in
+                              range(self.subcommunicators.comm.size))
+
+        # setting up ensemble
         self.ensemble_rank = self.subcommunicators.ensemble_comm.rank
         self.ensemble_size = self.subcommunicators.ensemble_comm.size
         self.ensemble = []
@@ -52,22 +52,24 @@ class base_filter(object, metaclass=ABCMeta):
         self.nglobal = int(np.sum(self.nensemble))
 
         # Shared array for the potentials
+        ecomm = self.subcommunicators.ensemble_comm
         self.potential_arr = SharedArray(partition=self.nensemble, dtype=float,
-                                      comm=self.subcommunicators.ensemble_comm)
+                                         comm=ecomm)
         # Owned array for the resampling protocol
-        self.s_arr = OwnedArray(size = self.nglobal, dtype=int,
-                                comm=self.subcommunicators.ensemble_comm,
+        self.s_arr = OwnedArray(size=self.nglobal, dtype=int,
+                                comm=ecomm,
                                 owner=0)
         # data layout for coordinating resampling communication
         self.layout = DistributedDataLayout1D(self.nensemble,
-                                         comm=self.subcommunicators.ensemble_comm)
+                                              comm=ecomm)
 
         # offset_list
         self.offset_list = []
         for i_rank in range(len(self.nensemble)):
             self.offset_list.append(sum(self.nensemble[:i_rank]))
-        #a resampling method
-        self.resampler = residual_resampling(seed=resampler_seed, residual=True)
+        # a resampling method
+        self.resampler = residual_resampling(seed=resampler_seed,
+                                             residual=True)
 
     def index2rank(self, index):
         for rank in range(len(self.offset_list)):
@@ -256,7 +258,7 @@ class jittertemp_filter(base_filter):
             if self.verbose:
                 PETSc.Sys.Print("taping forward model")
             self.model_taped = True
-            pyadjoint.tape.continue_annotation()
+            continue_annotation()
             self.model.run(self.ensemble[0],
                            self.new_ensemble[0])
             #set the controls
@@ -291,9 +293,9 @@ class jittertemp_filter(base_filter):
                                         derivative_components=
                                         components)
             if self.visualise_tape:
-                tape = pyadjoint.get_working_tape()
+                tape = get_working_tape()
                 tape.visualise_pdf("t.pdf")
-            pyadjoint.tape.pause_annotation()
+            pause_annotation()
 
         if self.nudging:
             if self.verbose:
