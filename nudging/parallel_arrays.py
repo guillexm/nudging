@@ -22,16 +22,24 @@ def in_range(i, length, allow_negative=True, throws=False):
 
 class DistributedDataLayout1D(object):
     def __init__(self, partition, comm=MPI.COMM_WORLD):
-        '''
-        A representation of a 1D set of data distributed over several MPI ranks.
-        :arg partition: The number of data elements on each rank. Can be a list of integers, in which case len(partition) must be comm.size. Can be a single integer, in which case all ranks have the same number of elements.
+        '''A representation of a 1D set of data distributed over several MPI
+        ranks.
+
+        :arg partition: The number of data elements on each rank. Can
+        be a list of integers, in which case len(partition) must be
+        comm.size. Can be a single integer, in which case all ranks
+        have the same number of elements.
+
         :arg comm: MPI communicator the data is distributed over.
+
         '''
         if isinstance(partition, int):
             partition = tuple(partition for _ in range(comm.size))
         else:
             if len(partition) != comm.size:
-                raise ValueError(f"Partition size {len(partition)} not equal to comm size {comm.size}")
+                raise ValueError(
+                    f"Partition size {len(partition)} not\
+                    equal to comm size {comm.size}")
             partition = tuple(partition)
         self.partition = partition
         self.comm = comm
@@ -41,8 +49,9 @@ class DistributedDataLayout1D(object):
         self.offset = sum(partition[:self.rank])
 
     def transform_index(self, i, itype='l', rtype='l'):
-        '''
-        Shift index between local and global addressing, and transform negative indices to their positive equivalent.
+        '''Shift index between local and global addressing, and transform
+        negative indices to their positive equivalent.
+
         For example if there are 3 ranks each owning two elements then:
             global indices 0,1 are local indices 0,1 on rank 0.
             global indices 2,3 are local indices 0,1 on rank 1.
@@ -50,10 +59,12 @@ class DistributedDataLayout1D(object):
         Negative indices are shifted to their positive equivalent:
             local index -1 becomes local index 1.
             global index -2 becomes local index 0 on rank 2.
+
         Throws IndexError if original or shifted index is out of bounds.
         :arg i: index to shift.
         :arg itype: type of index i. 'l' for local, 'g' for global.
-        :arg rtype: type of returned shifted index. 'l' for local, 'g' for global.
+        :arg rtype: type of returned shifted index. 'l' for local, 'g' for
+global.
         '''
         if itype not in ['l', 'g']:
             raise ValueError(f"itype {itype} must be either 'l' or 'g'")
@@ -82,7 +93,8 @@ class DistributedDataLayout1D(object):
         '''
         Is the globally addressed index i owned by this time rank?
         :arg i: globally addressed index.
-        :arg throws: if True, raises IndexError if i is outside the global address range
+        :arg throws: if True, raises IndexError if i is outside
+        the global address range
         '''
         try:
             self.transform_index(i, itype='g', rtype='l')
@@ -98,9 +110,13 @@ class SharedArray(object):
     def __init__(self, partition, dtype=None, comm=MPI.COMM_WORLD):
         '''
         1D array shared over an MPI comm.
-        Each rank has a copy of the entire array of size sum(partition) but can only  modify the partition[comm.rank] section of the array.
+        Each rank has a copy of the entire array of size sum(partition)
+        but can only  modify the partition[comm.rank] section of the array.
         Provides method for synchronising the array over the comm.
-        :arg partition: The number of data elements on each rank. Can be a list of integers, in which case len(partition) must be comm.size. Can be a single integer, in which case all ranks have the same number of elements.
+        :arg partition: The number of data elements on each rank. Can be a
+        list of integers, in which case len(partition) must be comm.size.
+        Can be a single integer, in which case all ranks have the same
+        number of elements.
         :arg dtype: datatype, defaults to numpy default dtype.
         :arg comm: MPI communicator that the array is distributed over.
         '''
@@ -149,11 +165,16 @@ class SharedArray(object):
             self._data[i] = val
 
     def synchronise(self, root=None):
-        """
-        Synchronise the array over the comm.
-        Until this method is called, array elements not owned by the current rank are not guaranteed to be valid.
-        If root=None, array is synchronised on all ranks. If root is a rank, then the array is synchronised on only that rank. Array elements on other ranks remain unsynchronised.
-        :arg root: The rank to synchronise the array onto. None for synchronise on all ranks.
+        """Synchronise the array over the comm.  Until this method is called,
+        array elements not owned by the current rank are not
+        guaranteed to be valid.
+
+        If root=None, array is synchronised on all ranks. If root is a
+        rank, then the array is synchronised on only that rank. Array
+        elements on other ranks remain unsynchronised.
+
+        :arg root: The rank to synchronise the array onto. None for
+        synchronise on all ranks.
         """
         if root is None:
             sendbuf = MPI.IN_PLACE
@@ -183,17 +204,20 @@ class SharedArray(object):
 
 class OwnedArray(object):
     def __init__(self, size, owner=0, comm=MPI.COMM_WORLD, dtype=None):
-        '''
-        Array owned by one rank but viewed over an MPI comm.
-        The array can only be modified by the root rank, but every rank has a copy of the entire array.
-        Modifying the array from any rank other than root invalidates the data.
+        '''Array owned by one rank but viewed over an MPI comm.  The array
+        can only be modified by the root rank, but every rank has a
+        copy of the entire array.  Modifying the array from any rank
+        other than root invalidates the data.
+
         :arg size: length of the array.
         :arg dtype: datatype, defaults to numpy default dtype.
         :arg comm: MPI communicator the array is synchronised over.
         :arg owner: owning rank.
+
         '''
         if not isinstance(size, int):
-            raise ValueError("Array size must be of type int. OwnedArray only supports 1D arrays")
+            raise ValueError("Array size must be of type int.\
+            OwnedArray only supports 1D arrays")
 
         self.size = size
         self.comm = comm
@@ -215,17 +239,20 @@ class OwnedArray(object):
         return self._data[i]
 
     def __setitem__(self, i, val):
-        '''
-        Set the value of the element at index i to val. Throws if the current rank does not own the array.
+        '''Set the value of the element at index i to val. Throws if the
+        current rank does not own the array.
+
         '''
         if not self.is_owner():
-            raise IndexError(f"Rank {self.rank} is not the owning rank {self.owner}")
+            raise IndexError(f"Rank {self.rank} is not the\
+            owning rank {self.owner}")
         self._data[i] = val
 
     def synchronise(self):
-        '''
-        Synchronise the array over the comm
-        Until this method is called, array elements on any rank but root are not guaranteed to be valid
+        '''Synchronise the array over the comm. Until this method is called,
+        array elements on any rank but root are not guaranteed to be
+        valid
+
         '''
         self.comm.Bcast(self._data, root=self.owner)
 
@@ -234,7 +261,8 @@ class OwnedArray(object):
         Resize array to size
         '''
         if not isinstance(size, int):
-            raise ValueError("Array size must be of type int. OwnedArray only supports 1D arrays")
+            raise ValueError("Array size must be of type int.\
+            OwnedArray only supports 1D arrays")
         self._data.resize(size, refcheck=False)
         self.size = size
 
