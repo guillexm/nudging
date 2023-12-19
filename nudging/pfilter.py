@@ -117,7 +117,7 @@ class base_filter(object, metaclass=ABCMeta):
                     targets.append(j)
 
             for target in targets:
-                if type(self.ensemble[ilocal]) == list:
+                if isinstance(self.ensemble[ilocal], list):
                     for k in range(len(self.ensemble[ilocal])):
                         request_send = self.subcommunicators.isend(
                             self.ensemble[ilocal][k],
@@ -132,7 +132,7 @@ class base_filter(object, metaclass=ABCMeta):
                     mpi_requests.extend(request_send)
 
             source_rank = self.index2rank(s_copy[iglobal])
-            if type(self.ensemble[ilocal]) == list:
+            if isinstance(self.ensemble[ilocal], list):
                 for k in range(len(self.ensemble[ilocal])):
                     request_recv = self.subcommunicators.irecv(
                         self.new_ensemble[ilocal][k],
@@ -260,7 +260,7 @@ class jittertemp_filter(base_filter):
             self.model.run(self.ensemble[0],
                            self.new_ensemble[0])
             # set the controls
-            if type(y == fd.Function):
+            if isinstance(y, fd.Function):
                 m = self.model.controls() + [fd.Control(y)]
             else:
                 m = self.model.controls()
@@ -293,7 +293,7 @@ class jittertemp_filter(base_filter):
                                                 derivative_components=cpts)
             if self.visualise_tape:
                 tape = get_working_tape()
-                assert type(self.visualise_tape) == str
+                assert isinstance(self.visualise_tape, str)
                 tape.visualise_pdf(self.visualise_tape)
             pause_annotation()
 
