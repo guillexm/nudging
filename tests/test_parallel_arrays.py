@@ -3,13 +3,13 @@ from pyop2.mpi import MPI
 
 from numpy import allclose
 
-from nudging import *
-
 from nudging.parallel_arrays import in_range
 
-from nudging.parallel_arrays import DistributedDataLayout1D, SharedArray, OwnedArray
+from nudging.parallel_arrays import DistributedDataLayout1D, \
+    SharedArray, OwnedArray
 
 partitions = [3, (2, 3, 4, 2)]
+
 
 def test_in_range():
     length = 5
@@ -79,7 +79,7 @@ def test_distributed_data_layout(partition):
 
         # -ve index changed to +ve
         neg_shift = layout.transform_index(-i, itype=itype, rtype=itype)
-        assert (neg_shift == imax - i)
+        assert neg_shift == imax - i
 
     # local address -> global address
 

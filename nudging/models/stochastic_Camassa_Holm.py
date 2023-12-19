@@ -1,157 +1,201 @@
-from firedrake import *
-from firedrake_adjoint import *
-from firedrake.petsc import PETSc
+import firedrake as fd
 from pyop2.mpi import MPI
-from nudging.model import *
+from nudging.model import base_model
 import numpy as np
 
+
 class Camsholm(base_model):
-    def __init__(self, n, nsteps, xpoints, dt = 0.01, alpha=1.0, seed=12353):
+    def __init__(self, n, nsteps, xpoints, seed, lambdas=False,
+                 dt=0.025, alpha=1.0, mu=0.01, salt=False):
 
         self.n = n
         self.nsteps = nsteps
         self.alpha = alpha
+        self.mu = mu
         self.dt = dt
         self.seed = seed
+        self.salt = salt
         self.xpoints = xpoints
+        self.lambdas = lambdas  # include lambdas in allocate
 
-    def setup(self, comm = MPI.COMM_WORLD):
-        self.mesh = PeriodicIntervalMesh(self.n, 40.0, comm = comm) # mesh need to be setup in parallel, width =4 and cell = self.n
-        self.x, = SpatialCoordinate(self.mesh)
+    def setup(self, comm=MPI.COMM_WORLD):
+        self.mesh = fd.PeriodicIntervalMesh(self.n, 40.0, comm=comm)
+        x, = fd.SpatialCoordinate(self.mesh)
 
-        #FE spaces
-        self.V = FunctionSpace(self.mesh, "CG", 1)
-        self.W = MixedFunctionSpace((self.V, self.V))
-        self.w0 = Function(self.W)
-        self.m0, self.u0 = self.w0.split()       
+        self.V = fd.FunctionSpace(self.mesh, "CG", 1)
+        V = fd.FunctionSpace(self.mesh, "CG", 1)
+        self.W = fd.MixedFunctionSpace((V, V))
+        self.w0 = fd.Function(self.W)
+        m0, u0 = self.w0.split()
+        One = fd.Function(V).assign(1.0)
+        dx = fd.dx
+        self.Area = fd.assemble(One*dx)
 
-        #Interpolate the initial condition
-
-        #Solve for the initial condition for m.
+        # Solver for the initial condition for m.
         alphasq = self.alpha**2
-        self.p = TestFunction(self.V)
-        self.m = TrialFunction(self.V)
-        
-        self.am = self.p*self.m*dx
-        self.Lm = (self.p*self.u0 + alphasq*self.p.dx(0)*self.u0.dx(0))*dx
-        mprob = LinearVariationalProblem(self.am, self.Lm, self.m0)
-        solver_parameters={'ksp_type': 'preonly', 'pc_type': 'lu'}
-        self.msolve = LinearVariationalSolver(mprob,
-                                              solver_parameters=solver_parameters)
-        
-        #Build the weak form of the timestepping algorithm. 
+        p = fd.TestFunction(V)
+        m = fd.TrialFunction(V)
 
-        self.p, self.q = TestFunctions(self.W)
+        am = p*m*dx
+        Lm = (p*u0 + alphasq*p.dx(0)*u0.dx(0))*dx
+        mprob = fd.LinearVariationalProblem(am, Lm, m0)
+        sp = {'ksp_type': 'preonly', 'pc_type': 'lu'}
+        self.msolve = fd.LinearVariationalSolver(mprob,
+                                                 solver_parameters=sp)
 
-        self.w1 = Function(self.W)
+        # Build the weak form of the timestepping algorithm.
+        p, q = fd.TestFunctions(self.W)
+        self.w1 = fd.Function(self.W)
         self.w1.assign(self.w0)
-        self.m1, self.u1 = split(self.w1)   # for n+1 the  time
-        self.m0, self.u0 = split(self.w0)   # for n th time 
-        
-        #Adding extra term included random number
-        self.fx1 = Function(self.V)
-        self.fx2 = Function(self.V)
-        self.fx3 = Function(self.V)
-        self.fx4 = Function(self.V)
+        m1, u1 = fd.split(self.w1)   # for n+1 th time
+        m0, u0 = fd.split(self.w0)   # for n th time
 
-        self.fx1.interpolate(0.1*sin(pi*self.x/8.))
-        self.fx2.interpolate(0.1*sin(2.*pi*self.x/8.))
-        self.fx3.interpolate(0.1*sin(3.*pi*self.x/8.))
-        self.fx4.interpolate(0.1*sin(4.*pi*self.x/8.))
+        # Setup noise term using Matern formula
+        self.W_F = fd.FunctionSpace(self.mesh, "DG", 0)
+        self.dW = fd.Function(self.W_F)
+        dphi = fd.TestFunction(V)
+        du = fd.TrialFunction(V)
 
-        # with added term
-        self.R = FunctionSpace(self.mesh, "R", 0)
-        self.dW = []
-        for i in range(self.nsteps):
-            subdW = []
-            for j in range(4):
-                subdW.append(Function(self.R))
-            self.dW.append(subdW)
+        cell_area = fd.CellVolume(self.mesh)
+        alpha_w = (1/cell_area**0.5)
+        kappa_inv_sq = 2*cell_area**2
 
-        self.dW1 = Function(self.R)
-        self.dW2 = Function(self.R)
-        self.dW3 = Function(self.R)
-        self.dW4 = Function(self.R)
-        self.Ln = self.fx1*self.dW1+self.fx2*self.dW2+self.fx3*self.dW3+self.fx4*self.dW4
-        
-        # finite element linear functional 
-        Dt = Constant(self.dt)
-        self.mh = 0.5*(self.m1 + self.m0)
-        self.uh = 0.5*(self.u1 + self.u0)
-        self.v = self.uh*Dt+self.Ln*Dt**0.5
+        dU_1 = fd.Function(V)
+        dU_2 = fd.Function(V)
+        dU_3 = fd.Function(V)
+        a_w = (dphi*du + kappa_inv_sq*dphi.dx(0)*du.dx(0))*dx
+        L_w0 = alpha_w*dphi*self.dW*dx
+        w_prob0 = fd.LinearVariationalProblem(a_w, L_w0, dU_1)
+        self.wsolver0 = fd.LinearVariationalSolver(w_prob0,
+                                                   solver_parameters=sp)
+        L_w1 = dphi*dU_1*dx
+        w_prob1 = fd.LinearVariationalProblem(a_w, L_w1, dU_2)
+        self.wsolver1 = fd.LinearVariationalSolver(w_prob1,
+                                                   solver_parameters=sp)
+        L_w = dphi*dU_2*dx
+        w_prob = fd.LinearVariationalProblem(a_w, L_w, dU_3)
+        self.wsolver = fd.LinearVariationalSolver(w_prob,
+                                                  solver_parameters=sp)
 
-        self.L = ((self.q*self.u1 + alphasq*self.q.dx(0)*self.u1.dx(0) - self.q*self.m1)*dx +(self.p*(self.m1-self.m0) + (self.p*self.v.dx(0)*self.mh -self.p.dx(0)*self.v*self.mh))*dx)
+        # finite element linear functional
+        Dt = self.dt
+        mh = 0.5*(m1 + m0)
+        uh = 0.5*(u1 + u0)
 
-        #def Linearfunc
+        if self.salt:
+            # SALT noise
+            v = uh*Dt+dU_3*Dt**0.5
+        else:
+            # additive noise
+            v = uh*Dt
+        L = ((q*u1 + alphasq*q.dx(0)*u1.dx(0) - q*m1)*dx
+             + (p*(m1-m0) + (p*v.dx(0)*mh - p.dx(0)*v*mh)
+                + self.mu*Dt*p.dx(0)*mh.dx(0))*dx)
 
-        # solver
+        if self.salt:
+            L += p*dU_3*Dt**0.5*dx
 
-        self.uprob = NonlinearVariationalProblem(self.L, self.w1)
-        self.usolver = NonlinearVariationalSolver(self.uprob, solver_parameters={'mat_type': 'aij', 'ksp_type': 'preonly','pc_type': 'lu'})
-
-        # Data save
-        self.m0, self.u0 = self.w0.split()
-        self.m1, self.u1 = self.w1.split()
+        # timestepping solver
+        uprob = fd.NonlinearVariationalProblem(L, self.w1)
+        sp = {'mat_type': 'aij', 'ksp_type': 'preonly', 'pc_type': 'lu'}
+        self.usolver = fd.NonlinearVariationalSolver(uprob,
+                                                     solver_parameters=sp)
 
         # state for controls
         self.X = self.allocate()
 
         # vertex only mesh for observations
-        
-        x_obs = np.arange(0.5,self.xpoints)
+        x_obs = np.linspace(0, 40, num=self.xpoints, endpoint=False)
         x_obs_list = []
         for i in x_obs:
             x_obs_list.append([i])
-        self.VOM = VertexOnlyMesh(self.mesh, x_obs_list)
-        self.VVOM = FunctionSpace(self.VOM, "DG", 0)
+        self.VOM = fd.VertexOnlyMesh(self.mesh, x_obs_list)
+        self.VVOM = fd.FunctionSpace(self.VOM, "DG", 0)
 
-    def run(self, X0, X1, operation = None):
+    def run(self, X0, X1):
+        # copy input into model variables for taping
         for i in range(len(X0)):
             self.X[i].assign(X0[i])
-        self.w0.assign(self.X[0])
-        self.msolve.solve()
-        for step in range(self.nsteps):
-            self.dW1.assign(self.X[4*step+1])
-            self.dW2.assign(self.X[4*step+2])
-            self.dW3.assign(self.X[4*step+3])
-            self.dW4.assign(self.X[4*step+4])
 
+        # copy initial condition into model variable
+        self.w0.assign(self.X[0])
+
+        # ensure momentum and velocity are syncronised
+        self.msolve.solve()
+
+        # do the timestepping
+        for step in range(self.nsteps):
+            # get noise variables and lambdas
+            self.dW.assign(self.X[step+1])
+            if self.lambdas:
+                self.dW += self.X[step+1+self.nsteps]*(self.dt)**0.5
+            # solve  dW --> dU0 --> dU1 --> dU
+            self.wsolver0.solve()
+            self.wsolver1.solve()
+            self.wsolver.solve()
+            # advance in time
             self.usolver.solve()
+            # copy output to input
             self.w0.assign(self.w1)
-            if operation:
-               operation(self.w0)
-        X1[0].assign(self.w0) # save sol at the nstep th time 
-        
-        
+
+        # return outputs
+        X1[0].assign(self.w0)  # save sol from the nstep th time
+
     def controls(self):
         controls_list = []
         for i in range(len(self.X)):
-            controls_list.append(Control(self.X[i]))
+            controls_list.append(fd.Control(self.X[i]))
         return controls_list
-        
+
     def obs(self):
         m, u = self.w0.split()
-        Y = Function(self.VVOM)
+        Y = fd.Function(self.VVOM)
         Y.interpolate(u)
         return Y
 
-
     def allocate(self):
-        particle = [Function(self.W)]
+        particle = [fd.Function(self.W)]
         for i in range(self.nsteps):
-            for j in range(4):
-                dW = Function(self.R)
-                dW.assign(self.rg.normal(self.R, 0., 1.0))
-                particle.append(dW) 
-        return particle 
-
+            dW = fd.Function(self.W_F)
+            particle.append(dW)
+        if self.lambdas:
+            for i in range(self.nsteps):
+                dW = fd.Function(self.W_F)
+                particle.append(dW)
+        return particle
 
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         rg = self.rg
         count = 0
         for i in range(self.nsteps):
-            for j in range(4):
-                count += 1
-                X[count].assign(c1*X[count] + c2*rg.normal(self.R, 0., 1.0))
-                if g:
-                    X[count] += gscale*g[count]
+            count += 1
+            X[count].assign(c1*X[count] + c2*rg.normal(
+                self.W_F, 0., 0.5))
+            if g:
+                X[count] += gscale*g[count]
+
+    def lambda_functional(self):
+        nsteps = self.nsteps
+        dt = self.dt
+
+        # This should have the effect of returning
+        # sum_n sum_i (dt*lambda_i^2/2 -  lambda_i*dW_i)
+        # where dW_i are the contributing Brownian increments
+        # and lambda_i are the corresponding Girsanov variables
+
+        # in the case of our DG0 Gaussian random fields, there
+        # is one per cell, so we can formulate this for UFL in a
+        # volume integral by dividing by cell volume.
+
+        dx = fd.dx
+        for step in range(nsteps):
+            lambda_step = self.X[nsteps + 1 + step]
+            dW_step = self.X[1 + step]
+            cv = fd.CellVolume(self.mesh)
+            dlfunc = fd.assemble((1/cv)*lambda_step**2*dt/2*dx
+                                 - (1/cv)*lambda_step*dW_step*dt**0.5*dx)
+            if step == 0:
+                lfunc = dlfunc
+            else:
+                lfunc += dlfunc
+        return lfunc

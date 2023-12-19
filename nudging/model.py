@@ -1,8 +1,7 @@
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from functools import cached_property
 from firedrake import Function, FunctionSpace, PCG64, RandomGenerator
-import firedrake as fd
-import numpy as np
+
 
 class base_model(object, metaclass=ABCMeta):
     def __init__(self):
@@ -35,13 +34,12 @@ class base_model(object, metaclass=ABCMeta):
         obs - a numpy array of the observations from current model state
         """
         pass
-    
 
     @abstractmethod
     def allocate(self):
         """
         Allocate a function to store a model state
-        
+
         returns
         X - a Function of the required type
         """
@@ -50,17 +48,17 @@ class base_model(object, metaclass=ABCMeta):
     @abstractmethod
     def randomize(self, X, c1=0, c2=1, gscale=None, g=None):
         """
-        input X: a list containing the state 
+        input X: a list containing the state
         plus the brownian motions in a list
         it is assumed that X[0] is the state and the rest of
         the list is the Brownian motions
 
-        replace dW_o <- c1*dW_o + c2*dW_n 
-        where dW_o is the old BM and 
+        replace dW_o <- c1*dW_o + c2*dW_n
+        where dW_o is the old BM and
         dW_n is the new BM
         if g is present then add gscale*g
-        where g is the derivative of the functional w.r.t. 
-        the Brownian motion 
+        where g is the derivative of the functional w.r.t.
+        the Brownian motion
         noting that we have the state and the observations in
         the controls as well
         i.e. g[0] - state (ignore for randomize)
@@ -68,7 +66,6 @@ class base_model(object, metaclass=ABCMeta):
         g[m+1] - observations (ignore for randomize)
         """
         pass
-
 
     @cached_property
     def R(self):
